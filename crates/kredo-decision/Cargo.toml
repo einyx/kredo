@@ -1,0 +1,13 @@
+[package]
+name = "kredo-decision"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Question schema, sequence layouts, calibration and answers for kredo decision models"
+repository = "https://github.com/einyx/kredo"
+
+[dependencies]
+kredo-api.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

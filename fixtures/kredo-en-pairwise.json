@@ -1,0 +1,10 @@
+{
+  "model": "kredo:en",
+  "input": "I was charged twice for my subscription this month and want a refund.",
+  "questions": [
+    {"id": "intent", "type": "choice", "prompt": "What does the user want?", "options": ["a refund", "a bug report", "praise"]}
+  ],
+  "expectations": {
+    "intent": {"top": "a refund", "top_p_gt": 0.95}
+  }
+}

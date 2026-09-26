@@ -1,0 +1,13 @@
+[package]
+name = "kredo-lang"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Script and language detection for kredo routers"
+repository = "https://github.com/einyx/kredo"
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

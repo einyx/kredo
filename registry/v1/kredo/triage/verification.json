@@ -1,0 +1,241 @@
+{
+  "provenance": {
+    "dataset": "synthetic triage corpus (seeded templates + noise)",
+    "seed": 7,
+    "pipeline": "convert v0.1.0",
+    "metrics": {
+      "intent.accuracy": 1.0,
+      "is_urgent.accuracy": 1.0,
+      "frustration.mae": 0.3434,
+      "refund_requested.accuracy": 1.0,
+      "churn_risk.accuracy": 0.8438
+    }
+  },
+  "verification": {
+    "fixture_digest": "80ba691f45191376f85d319d4bc3fd7bd973f06a3b9312fd4a7e6d9da1615939",
+    "tolerance": 0.0001,
+    "verified_at": "2026-09-26T19:56:18+00:00",
+    "cases": 3
+  },
+  "questions": [
+    {
+      "id": "intent",
+      "type": "choice",
+      "prompt": "What does the user want?",
+      "options": [
+        "a refund",
+        "a bug report",
+        "a question about billing",
+        "cancelling the account",
+        "praise"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "id": "is_urgent",
+      "type": "noul",
+      "prompt": "This message is urgent and needs a same-day response",
+      "options": [],
+      "min": null,
+      "max": null
+    },
+    {
+      "id": "frustration",
+      "type": "score",
+      "prompt": "How frustrated is the user?",
+      "options": [
+        "not frustrated at all",
+        "extremely frustrated"
+      ],
+      "min": 0.0,
+      "max": 3.0
+    },
+    {
+      "id": "refund_requested",
+      "type": "noul",
+      "prompt": "The user explicitly asks for a refund",
+      "options": [],
+      "min": null,
+      "max": null
+    },
+    {
+      "id": "churn_risk",
+      "type": "noul",
+      "prompt": "The user is at risk of cancelling their subscription",
+      "options": [],
+      "min": null,
+      "max": null
+    }
+  ],
+  "cases": [
+    {
+      "input": "Can you explain the charge on my invoice for API?",
+      "answers": [
+        {
+          "id": "intent",
+          "type": "choice",
+          "value": [
+            {
+              "label": "a question about billing",
+              "p": 0.997948
+            },
+            {
+              "label": "praise",
+              "p": 0.000882
+            },
+            {
+              "label": "a bug report",
+              "p": 0.0005
+            },
+            {
+              "label": "a refund",
+              "p": 0.000386
+            },
+            {
+              "label": "cancelling the account",
+              "p": 0.000284
+            }
+          ]
+        },
+        {
+          "id": "is_urgent",
+          "type": "noul",
+          "value": 0.001669
+        },
+        {
+          "id": "frustration",
+          "type": "score",
+          "value": {
+            "value": 0.39517,
+            "normalized": 0.131723,
+            "min": 0.0,
+            "max": 3.0
+          }
+        },
+        {
+          "id": "refund_requested",
+          "type": "noul",
+          "value": 0.001175
+        },
+        {
+          "id": "churn_risk",
+          "type": "noul",
+          "value": 0.008981
+        }
+      ]
+    },
+    {
+      "input": "Whenever you get a chance, Just wanted to say the new export is amazing, great work!",
+      "answers": [
+        {
+          "id": "intent",
+          "type": "choice",
+          "value": [
+            {
+              "label": "praise",
+              "p": 0.99734
+            },
+            {
+              "label": "cancelling the account",
+              "p": 0.000854
+            },
+            {
+              "label": "a question about billing",
+              "p": 0.000762
+            },
+            {
+              "label": "a refund",
+              "p": 0.000531
+            },
+            {
+              "label": "a bug report",
+              "p": 0.000513
+            }
+          ]
+        },
+        {
+          "id": "is_urgent",
+          "type": "noul",
+          "value": 0.001131
+        },
+        {
+          "id": "frustration",
+          "type": "score",
+          "value": {
+            "value": 0.293805,
+            "normalized": 0.097935,
+            "min": 0.0,
+            "max": 3.0
+          }
+        },
+        {
+          "id": "refund_requested",
+          "type": "noul",
+          "value": 0.001373
+        },
+        {
+          "id": "churn_risk",
+          "type": "noul",
+          "value": 0.004969
+        }
+      ]
+    },
+    {
+      "input": "I was charged two times for my API this month and want my money back.",
+      "answers": [
+        {
+          "id": "intent",
+          "type": "choice",
+          "value": [
+            {
+              "label": "a refund",
+              "p": 0.994708
+            },
+            {
+              "label": "praise",
+              "p": 0.002347
+            },
+            {
+              "label": "a question about billing",
+              "p": 0.001536
+            },
+            {
+              "label": "cancelling the account",
+              "p": 0.001018
+            },
+            {
+              "label": "a bug report",
+              "p": 0.00039
+            }
+          ]
+        },
+        {
+          "id": "is_urgent",
+          "type": "noul",
+          "value": 0.003179
+        },
+        {
+          "id": "frustration",
+          "type": "score",
+          "value": {
+            "value": 1.69938,
+            "normalized": 0.56646,
+            "min": 0.0,
+            "max": 3.0
+          }
+        },
+        {
+          "id": "refund_requested",
+          "type": "noul",
+          "value": 0.996409
+        },
+        {
+          "id": "churn_risk",
+          "type": "noul",
+          "value": 0.007928
+        }
+      ]
+    }
+  ]
+}

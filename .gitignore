@@ -1,0 +1,11 @@
+/target
+Cargo.lock.bak
+*.log
+.DS_Store
+
+# python
+__pycache__/
+*.pyc
+.venv/
+convert/data/
+convert/out/

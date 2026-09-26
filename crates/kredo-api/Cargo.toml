@@ -1,0 +1,15 @@
+[package]
+name = "kredo-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Wire types and client for the kredo decision-model API (TypeSafe-compatible /v1/systemone)"
+repository = "https://github.com/einyx/kredo"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+reqwest.workspace = true
+futures.workspace = true
+tokio-stream.workspace = true

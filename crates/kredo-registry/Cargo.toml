@@ -1,0 +1,21 @@
+[package]
+name = "kredo-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Model manifests, blob store and resumable verified pulls for kredo"
+repository = "https://github.com/einyx/kredo"
+
+[dependencies]
+kredo-api.workspace = true
+kredo-decision.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+hex.workspace = true
+dirs.workspace = true
+reqwest.workspace = true
+futures.workspace = true
+tokio.workspace = true
+tracing.workspace = true

@@ -1,0 +1,26 @@
+[package]
+name = "kredo-runner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ONNX Runtime inference engines for kredo decision models"
+repository = "https://github.com/einyx/kredo"
+
+[features]
+default = []
+cuda = ["ort/cuda"]
+
+[dependencies]
+kredo-api.workspace = true
+kredo-decision.workspace = true
+kredo-registry.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+hex.workspace = true
+ort.workspace = true
+tokenizers.workspace = true
+sha2.workspace = true
+ndarray.workspace = true
+tracing.workspace = true

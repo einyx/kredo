@@ -1,0 +1,31 @@
+[package]
+name = "kredo-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "HTTP daemon and scheduler for kredo decision models"
+repository = "https://github.com/einyx/kredo"
+
+[dependencies]
+kredo-api.workspace = true
+kredo-decision.workspace = true
+kredo-lang.workspace = true
+kredo-registry.workspace = true
+kredo-runner.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+futures.workspace = true
+axum.workspace = true
+axum-server.workspace = true
+tower-http.workspace = true
+subtle.workspace = true
+clap.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+serde_json.workspace = true

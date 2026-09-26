@@ -1,0 +1,27 @@
+[project]
+name = "kredo-convert"
+version = "0.1.0"
+description = "Train, export, parity-check and package kredo decision models"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.44",
+    "onnx>=1.16",
+    "onnxscript>=0.1",
+    "onnxruntime>=1.18",
+    "safetensors>=0.4",
+    "numpy>=1.26",
+    "sentencepiece>=0.2",
+    "datasets>=5.0.1",
+    "pandas>=3.0.6",
+]
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kredo_convert"]

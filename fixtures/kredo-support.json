@@ -1,0 +1,204 @@
+{
+  "model": "kredo:support",
+  "note": "expected values computed by onnxruntime at export time; the Rust runner must match within fixture_tolerance",
+  "fixture_tolerance": 0.0001,
+  "questions": [
+    {
+      "id": "queue",
+      "type": "choice",
+      "prompt": "Which support queue should handle this ticket?",
+      "options": [
+        "Billing and Payments",
+        "Customer Service",
+        "General Inquiry",
+        "Human Resources",
+        "IT Support",
+        "Product Support",
+        "Returns and Exchanges",
+        "Sales and Pre-Sales",
+        "Service Outages and Maintenance",
+        "Technical Support"
+      ],
+      "min": null,
+      "max": null
+    },
+    {
+      "id": "is_urgent",
+      "type": "noul",
+      "prompt": "This ticket is high priority and needs an immediate response",
+      "options": [],
+      "min": null,
+      "max": null
+    }
+  ],
+  "cases": [
+    {
+      "input": ". Users have reported experiencing sluggish performance and timeout errors on the SaaS platform. It appears that a recent deployment may have led to resource constraints. Restarting the servers and clearing caches temporarily resolves the problem. Further investigation is required to determine the underlying cause and enhance platform efficiency.",
+      "answers": [
+        {
+          "id": "queue",
+          "type": "choice",
+          "value": [
+            {
+              "label": "Product Support",
+              "p": 0.383566
+            },
+            {
+              "label": "Customer Service",
+              "p": 0.213606
+            },
+            {
+              "label": "Technical Support",
+              "p": 0.19662
+            },
+            {
+              "label": "IT Support",
+              "p": 0.117968
+            },
+            {
+              "label": "Returns and Exchanges",
+              "p": 0.037998
+            },
+            {
+              "label": "Human Resources",
+              "p": 0.021737
+            },
+            {
+              "label": "Sales and Pre-Sales",
+              "p": 0.012085
+            },
+            {
+              "label": "Billing and Payments",
+              "p": 0.006973
+            },
+            {
+              "label": "General Inquiry",
+              "p": 0.006564
+            },
+            {
+              "label": "Service Outages and Maintenance",
+              "p": 0.002884
+            }
+          ]
+        },
+        {
+          "id": "is_urgent",
+          "type": "noul",
+          "value": 0.24489
+        }
+      ]
+    },
+    {
+      "input": "Incorrect Investment Forecasts Detected. Customer Support, reporting an issue with the financial firm's investment forecasts. We observed that the predictions are incorrect and suspect this may be due to faulty data integration. Our team attempted to recalibrate the algorithms and data sources, but the problem persists. We are concerned that this could impact investment decisions and would like to request assistance in resolving the issue. Could you please review and suggest potential solutions or improvements? Thank you for your prompt attention to this matter; we look forward to your response.",
+      "answers": [
+        {
+          "id": "queue",
+          "type": "choice",
+          "value": [
+            {
+              "label": "Product Support",
+              "p": 0.402937
+            },
+            {
+              "label": "Customer Service",
+              "p": 0.244555
+            },
+            {
+              "label": "Technical Support",
+              "p": 0.14369
+            },
+            {
+              "label": "Returns and Exchanges",
+              "p": 0.111974
+            },
+            {
+              "label": "General Inquiry",
+              "p": 0.023899
+            },
+            {
+              "label": "IT Support",
+              "p": 0.023098
+            },
+            {
+              "label": "Sales and Pre-Sales",
+              "p": 0.022255
+            },
+            {
+              "label": "Billing and Payments",
+              "p": 0.01587
+            },
+            {
+              "label": "Human Resources",
+              "p": 0.010366
+            },
+            {
+              "label": "Service Outages and Maintenance",
+              "p": 0.001357
+            }
+          ]
+        },
+        {
+          "id": "is_urgent",
+          "type": "noul",
+          "value": 0.276841
+        }
+      ]
+    },
+    {
+      "input": ". Customer Support,  I am writing to draw attention to an incident that occurred within the Billing Payments queue. Several billing errors for products have been reported, which may have caused synchronization problems with the payment gateway integration. Our team attempted to troubleshoot the issue by verifying transaction logs and retrying payment requests. Unfortunately, the problem remains unresolved.  We are concerned that this issue could impact customers' ability to make payments and would like to request assistance in resolving it promptly.",
+      "answers": [
+        {
+          "id": "queue",
+          "type": "choice",
+          "value": [
+            {
+              "label": "Billing and Payments",
+              "p": 0.991626
+            },
+            {
+              "label": "Returns and Exchanges",
+              "p": 0.001835
+            },
+            {
+              "label": "Technical Support",
+              "p": 0.001294
+            },
+            {
+              "label": "Customer Service",
+              "p": 0.000988
+            },
+            {
+              "label": "Human Resources",
+              "p": 0.000937
+            },
+            {
+              "label": "IT Support",
+              "p": 0.000934
+            },
+            {
+              "label": "Sales and Pre-Sales",
+              "p": 0.000906
+            },
+            {
+              "label": "Product Support",
+              "p": 0.00063
+            },
+            {
+              "label": "General Inquiry",
+              "p": 0.000481
+            },
+            {
+              "label": "Service Outages and Maintenance",
+              "p": 0.000369
+            }
+          ]
+        },
+        {
+          "id": "is_urgent",
+          "type": "noul",
+          "value": 0.286582
+        }
+      ]
+    }
+  ]
+}

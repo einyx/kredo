@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t kredo:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --name kredo-ci -p 21435:21435 kredo:ci
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:21435/healthz && break
+            sleep 1
+          done
+          curl -sf http://localhost:21435/version | grep -q version
+          curl -sf http://localhost:21435/readyz | grep -q ready
+          docker rm -f kredo-ci
