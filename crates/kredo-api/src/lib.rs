@@ -227,6 +227,12 @@ pub struct ShowResponse {
     pub size: u64,
     pub details: BTreeMap<String, serde_json::Value>,
     pub questions: Vec<Question>,
+    /// Training provenance (trained models).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<serde_json::Value>,
+    /// Recorded verification block (verified models).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<serde_json::Value>,
 }
 
 /// Error envelope used across the API.

@@ -4,6 +4,20 @@ All notable changes to kredo are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.2.0] - unreleased
+
+### Added
+- `kredo ui`: embedded decision playground served at `/ui` — model picker
+  with verification seals, structured question editor, animated calibrated
+  probability bars, provenance panel. Fully offline (fonts, icons and logic
+  ship inside the binary).
+- `kredo mcp`: Model Context Protocol stdio server exposing
+  `kredo_decide`, `kredo_list_models` and `kredo_describe_model`; tool
+  descriptions surface verification status.
+- `kredo-mcp` npm package: `npx kredo-mcp install` registers the kredo MCP
+  server with Claude Code, Claude Desktop and opencode; `npx kredo-mcp`
+  runs the server, downloading the release binary on first use.
+
 ## [0.1.0] - unreleased
 
 ### Added

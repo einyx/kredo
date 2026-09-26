@@ -5,6 +5,7 @@
 //! runs a supervised daemon that restarts on crash.
 
 mod client;
+mod mcp;
 mod output;
 mod pidfile;
 
@@ -58,6 +59,10 @@ enum Command {
     Cp { source: String, dest: String },
     /// Unload a resident model.
     Unload { model: String },
+    /// Expose kredo models as MCP tools over stdio (claude mcp add kredo -- kredo mcp).
+    Mcp,
+    /// Open the decision playground in your browser.
+    Ui,
     /// Re-run the model's verification fixtures locally and print a report.
     Verify { model: String },
     /// Bake a question set into a new local model (Modelfile).
@@ -303,6 +308,35 @@ async fn main() -> Result<()> {
             ensure_daemon().await?;
             client::stop(&base_url(), &model).await?;
             println!("unloaded {model}");
+            Ok(())
+        }
+        Command::Mcp => mcp::run().await,
+        Command::Ui => {
+            ensure_daemon().await?;
+            let url = format!("{}/ui", base_url());
+            #[cfg(target_os = "macos")]
+            let opened = tokio::process::Command::new("open")
+                .arg(&url)
+                .status()
+                .await;
+            #[cfg(target_os = "linux")]
+            let opened = tokio::process::Command::new("xdg-open")
+                .arg(&url)
+                .status()
+                .await;
+            #[cfg(target_os = "windows")]
+            let opened = tokio::process::Command::new("cmd")
+                .args(["/c", "start", "", &url])
+                .status()
+                .await;
+            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            let opened: Result<std::process::ExitStatus, _> =
+                Ok(std::process::ExitStatus::default());
+            if opened.map(|s| s.success()).unwrap_or(false) {
+                println!("playground: {url}");
+            } else {
+                println!("open {url} in your browser");
+            }
             Ok(())
         }
         Command::Verify { model } => {

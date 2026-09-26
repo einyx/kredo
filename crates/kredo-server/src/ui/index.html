@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kredo — decision playground</title>
+<style>
+/* ---------- fonts ---------- */
+@font-face { font-family: "Space Grotesk"; src: url("/ui/fonts/spacegrotesk-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Space Grotesk"; src: url("/ui/fonts/spacegrotesk-500.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/ui/fonts/geist-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/ui/fonts/geist-500.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+/* ---------- tokens ---------- */
+:root {
+  --bg: #050505;
+  --ink: #f4f4f5;
+  --ink-dim: rgba(244,244,245,.55);
+  --ink-faint: rgba(244,244,245,.32);
+  --hairline: rgba(255,255,255,.10);
+  --hairline-soft: rgba(255,255,255,.06);
+  --violet: #8b5cf6;
+  --emerald: #34d399;
+  --amber: #fbbf24;
+  --shell: rgba(255,255,255,.04);
+  --core: rgba(10,10,11,.82);
+  --r-outer: 2rem;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --font-display: "Space Grotesk", "Avenir Next", sans-serif;
+  --font-body: "Geist", "SF Pro Text", sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::selection { background: rgba(139,92,246,.35); }
+
+/* ---------- atmosphere (fixed, GPU-safe) ---------- */
+.orb { position: fixed; border-radius: 50%; filter: blur(120px); opacity: .22; pointer-events: none; z-index: 0; }
+.orb-violet { width: 44rem; height: 44rem; top: -18rem; left: -12rem; background: radial-gradient(circle, var(--violet), transparent 65%); }
+.orb-emerald { width: 38rem; height: 38rem; bottom: -16rem; right: -10rem; background: radial-gradient(circle, var(--emerald), transparent 65%); opacity: .13; }
+.grain { position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: .03; }
+.grain::before { content: ""; position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* ---------- floating glass nav ---------- */
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; justify-content: center; padding-top: 1.5rem; pointer-events: none; }
+.nav-pill {
+  pointer-events: auto; display: flex; align-items: center; gap: 1rem;
+  padding: .55rem .7rem .55rem 1.25rem;
+  background: rgba(10,10,11,.55);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border-radius: 999px; border: 1px solid var(--hairline);
+  transition: transform .7s var(--ease), box-shadow .7s var(--ease);
+}
+.nav-pill:hover { transform: translateY(-1px); box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+.nav-mark { display: flex; align-items: center; gap: .6rem; font-family: var(--font-display); font-weight: 700; letter-spacing: .02em; font-size: .95rem; }
+.nav-mark svg { width: 18px; height: 18px; stroke: var(--emerald); }
+.nav-conn { font-size: 11px; color: var(--ink-faint); padding-right: .5rem; }
+.nav-conn .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); margin-right: .4rem; transition: background .5s var(--ease); }
+.nav-conn.ok .dot { background: var(--emerald); }
+.nav-conn.bad .dot { background: var(--amber); }
+
+/* ---------- layout ---------- */
+main { position: relative; z-index: 1; max-width: 76rem; margin: 0 auto; padding: 9rem 1.5rem 6rem; }
+.hero { padding: 3rem 0 4.5rem; }
+.eyebrow { display: inline-flex; align-items: center; gap: .5rem; border: 1px solid var(--hairline); border-radius: 999px; padding: .3rem .85rem; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-dim); font-weight: 500; background: rgba(255,255,255,.03); }
+.eyebrow .pulse { width: 5px; height: 5px; border-radius: 50%; background: var(--emerald); animation: pulse 2.4s var(--ease) infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(2.6rem, 6vw, 4.6rem); line-height: 1.02; letter-spacing: -.02em; margin: 1.4rem 0 1.1rem; }
+h1 em { font-style: normal; color: transparent; background: linear-gradient(100deg, var(--violet), var(--emerald)); -webkit-background-clip: text; background-clip: text; }
+.sub { max-width: 34rem; color: var(--ink-dim); font-size: 1.02rem; }
+
+/* ---------- bento grid ---------- */
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1.25rem; align-items: start; }
+.b-left { grid-column: span 8; display: flex; flex-direction: column; gap: 1.25rem; }
+.b-right { grid-column: span 4; display: flex; flex-direction: column; gap: 1.25rem; position: sticky; top: 6.5rem; }
+
+/* ---------- double-bezel ---------- */
+.shell { background: var(--shell); border: 1px solid var(--hairline-soft); border-radius: var(--r-outer); padding: .375rem; }
+.core { background: var(--core); border-radius: calc(var(--r-outer) - .375rem); box-shadow: inset 0 1px 1px rgba(255,255,255,.08); padding: 1.6rem; }
+.core-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
+.core-title { font-family: var(--font-display); font-weight: 500; font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); display: flex; align-items: center; gap: .55rem; }
+.core-title svg { width: 14px; height: 14px; stroke: var(--ink-faint); }
+
+/* ---------- inputs ---------- */
+textarea, input[type=text] {
+  width: 100%; background: rgba(255,255,255,.035); color: var(--ink);
+  border: 1px solid transparent; border-radius: 1rem;
+  font-family: var(--font-body); font-size: .95rem; line-height: 1.55;
+  padding: .95rem 1.1rem; outline: none; resize: none;
+  transition: border-color .5s var(--ease), background .5s var(--ease);
+}
+textarea:focus, input[type=text]:focus { border-color: rgba(139,92,246,.45); background: rgba(255,255,255,.05); }
+textarea::placeholder, input::placeholder { color: var(--ink-faint); }
+
+.field { margin-bottom: 1.1rem; }
+.field label { display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: .5rem; font-weight: 500; }
+
+/* model picker */
+.models { display: flex; flex-wrap: wrap; gap: .5rem; }
+.model-chip {
+  display: inline-flex; align-items: center; gap: .5rem; cursor: pointer;
+  border: 1px solid var(--hairline-soft); background: rgba(255,255,255,.03);
+  color: var(--ink-dim); border-radius: 999px; padding: .45rem .95rem;
+  font-family: var(--font-body); font-size: .82rem; font-weight: 500;
+  transition: all .6s var(--ease);
+}
+.model-chip:hover { border-color: var(--hairline); color: var(--ink); transform: translateY(-1px); }
+.model-chip.active { border-color: rgba(52,211,153,.5); color: var(--ink); background: rgba(52,211,153,.08); }
+.model-chip .seal { width: 7px; height: 7px; border-radius: 50%; }
+.model-chip .seal.ok { background: var(--emerald); box-shadow: 0 0 8px rgba(52,211,153,.7); }
+.model-chip .seal.no { background: var(--amber); box-shadow: 0 0 8px rgba(251,191,36,.5); }
+
+/* question editor */
+.q-card { border: 1px solid var(--hairline-soft); border-radius: 1.1rem; padding: 1rem 1.1rem; margin-bottom: .8rem; background: rgba(255,255,255,.02); transition: border-color .5s var(--ease); }
+.q-card:hover { border-color: var(--hairline); }
+.q-row { display: flex; gap: .6rem; align-items: center; margin-bottom: .7rem; }
+.q-row:last-child { margin-bottom: 0; }
+select {
+  background: rgba(255,255,255,.04); color: var(--ink); border: 1px solid var(--hairline-soft);
+  border-radius: .7rem; padding: .45rem .7rem; font-family: var(--font-body); font-size: .8rem; outline: none;
+  transition: border-color .5s var(--ease);
+}
+select:focus { border-color: rgba(139,92,246,.45); }
+.q-del { margin-left: auto; background: none; border: none; color: var(--ink-faint); cursor: pointer; padding: .3rem; border-radius: .6rem; transition: all .5s var(--ease); display: flex; }
+.q-del:hover { color: var(--amber); background: rgba(251,191,36,.08); }
+.q-del svg { width: 14px; height: 14px; }
+.opt-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.opt-chip { display: inline-flex; align-items: center; gap: .45rem; border: 1px solid var(--hairline-soft); border-radius: 999px; padding: .3rem .8rem; font-size: .78rem; color: var(--ink-dim); }
+.opt-chip button { background: none; border: none; color: var(--ink-faint); cursor: pointer; font-size: .8rem; line-height: 1; padding: 0; }
+.opt-chip button:hover { color: var(--amber); }
+.mini-input { width: auto; flex: 1; background: rgba(255,255,255,.035); border: 1px solid transparent; border-radius: .7rem; color: var(--ink); padding: .45rem .8rem; font-size: .82rem; outline: none; font-family: var(--font-body); transition: border-color .5s var(--ease); }
+.mini-input:focus { border-color: rgba(139,92,246,.45); }
+
+/* pill buttons with nested trailing icon */
+.btn {
+  display: inline-flex; align-items: center; gap: .8rem;
+  border: none; cursor: pointer; border-radius: 999px;
+  padding: .55rem .6rem .55rem 1.35rem;
+  font-family: var(--font-display); font-weight: 500; font-size: .88rem;
+  background: linear-gradient(120deg, var(--violet), #6d28d9);
+  color: #fff; position: relative;
+  transition: transform .6s var(--ease), box-shadow .6s var(--ease), opacity .6s var(--ease);
+  box-shadow: 0 8px 30px rgba(109,40,217,.35);
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 14px 44px rgba(109,40,217,.5); }
+.btn:active { transform: scale(.98); }
+.btn .orb-icon {
+  width: 2rem; height: 2rem; border-radius: 50%; background: rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .6s var(--ease);
+}
+.btn:hover .orb-icon { transform: translate(3px, -2px) scale(1.06); }
+.btn svg { width: 14px; height: 14px; stroke: #fff; }
+.btn.ghost { background: rgba(255,255,255,.05); color: var(--ink-dim); box-shadow: none; border: 1px solid var(--hairline-soft); }
+.btn.ghost:hover { color: var(--ink); border-color: var(--hairline); }
+.btn.ghost .orb-icon { background: rgba(255,255,255,.08); }
+.btn[disabled] { opacity: .5; pointer-events: none; }
+.btn-row { display: flex; gap: .7rem; align-items: center; margin-top: 1.2rem; }
+
+/* ---------- verification seal ---------- */
+.seal-card { text-align: left; }
+.seal {
+  display: inline-flex; align-items: center; gap: .6rem;
+  border-radius: 999px; padding: .5rem 1.1rem; font-family: var(--font-display);
+  font-weight: 700; letter-spacing: .18em; font-size: .78rem; text-transform: uppercase;
+  transition: all .8s var(--ease);
+}
+.seal.ok { color: var(--emerald); border: 1px solid rgba(52,211,153,.35); background: rgba(52,211,153,.07); text-shadow: 0 0 18px rgba(52,211,153,.6); }
+.seal.no { color: var(--amber); border: 1px solid rgba(251,191,36,.3); background: rgba(251,191,36,.06); }
+.seal .ring { width: 9px; height: 9px; border-radius: 50%; }
+.seal.ok .ring { background: var(--emerald); box-shadow: 0 0 14px var(--emerald); animation: pulse 2s var(--ease) infinite; }
+.seal.no .ring { background: var(--amber); }
+.prov { margin-top: 1.1rem; display: flex; flex-direction: column; gap: .45rem; }
+.prov-row { display: flex; justify-content: space-between; gap: 1rem; font-size: .8rem; }
+.prov-row .k { color: var(--ink-faint); }
+.prov-row .v { color: var(--ink-dim); text-align: right; font-variant-numeric: tabular-nums; }
+.metrics { margin-top: .9rem; border-top: 1px solid var(--hairline-soft); padding-top: .9rem; display: flex; flex-direction: column; gap: .55rem; }
+.metric { display: grid; grid-template-columns: 1fr auto; gap: .8rem; align-items: center; font-size: .78rem; }
+.metric .name { color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metric .bar { grid-column: 1 / -1; height: 3px; border-radius: 999px; background: rgba(255,255,255,.06); overflow: hidden; }
+.metric .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--violet), var(--emerald)); border-radius: 999px; transform-origin: left; transform: scaleX(0); transition: transform 1.1s var(--ease); }
+.metric.in .bar i { transform: scaleX(1); }
+.metric .val { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* ---------- results ---------- */
+.answers { display: flex; flex-direction: column; gap: 1.05rem; }
+.answer { opacity: 0; transform: translateY(10px); transition: opacity .8s var(--ease), transform .8s var(--ease); }
+.answer.in { opacity: 1; transform: translateY(0); }
+.answer .a-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .55rem; }
+.answer .a-id { font-family: var(--font-display); font-weight: 500; font-size: .92rem; }
+.answer .a-top { font-size: .8rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.answer .a-top b { color: var(--emerald); font-weight: 500; }
+.track { height: 8px; border-radius: 999px; background: rgba(255,255,255,.06); overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 999px; transform-origin: left; transform: scaleX(0); transition: transform 1.2s var(--ease); background: linear-gradient(90deg, rgba(139,92,246,.9), var(--emerald)); }
+.dist { display: flex; flex-direction: column; gap: .6rem; margin-top: .3rem; }
+.dist-row { display: grid; grid-template-columns: minmax(6rem, 1fr) 2.2fr auto; gap: .8rem; align-items: center; font-size: .8rem; }
+.dist-row .lbl { color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dist-row .val { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 3.2rem; text-align: right; }
+.gauge { position: relative; height: 8px; border-radius: 999px; background: rgba(255,255,255,.06); overflow: hidden; }
+.gauge i { position: absolute; top: 0; left: 0; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--emerald), var(--amber), #f87171); transform-origin: left; transform: scaleX(0); transition: transform 1.2s var(--ease); }
+.chips { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: 1.15rem; padding-top: 1.05rem; border-top: 1px solid var(--hairline-soft); }
+.chip { font-size: .72rem; color: var(--ink-faint); border: 1px solid var(--hairline-soft); padding: .25rem .7rem; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.chip b { color: var(--ink-dim); font-weight: 500; }
+
+.empty { color: var(--ink-faint); font-size: .86rem; padding: 1.4rem 0; text-align: center; }
+.err { color: var(--amber); font-size: .85rem; padding: 1rem 1.2rem; border: 1px solid rgba(251,191,36,.25); background: rgba(251,191,36,.05); border-radius: 1rem; white-space: pre-wrap; }
+
+/* key overlay */
+.overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(5,5,5,.7); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); opacity: 0; pointer-events: none; transition: opacity .7s var(--ease); }
+.overlay.in { opacity: 1; pointer-events: auto; }
+.overlay .shell { width: min(26rem, calc(100vw - 2rem)); transform: translateY(24px); transition: transform .7s var(--ease); }
+.overlay.in .shell { transform: translateY(0); }
+
+/* ---------- scroll reveal ---------- */
+.reveal { opacity: 0; transform: translateY(3.2rem); filter: blur(8px); transition: opacity .95s var(--ease), transform .95s var(--ease), filter .95s var(--ease); }
+.reveal.in { opacity: 1; transform: translateY(0); filter: blur(0); }
+
+/* ---------- mobile collapse ---------- */
+@media (max-width: 767px) {
+  main { padding: 7.5rem 1rem 4rem; }
+  .bento { grid-template-columns: 1fr; }
+  .b-left, .b-right { grid-column: 1 / -1; }
+  .b-right { position: static; }
+  .hero { padding: 2rem 0 3rem; }
+  .nav-conn { display: none; }
+  .core { padding: 1.2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  .reveal { opacity: 1; transform: none; filter: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="orb orb-violet"></div>
+<div class="orb orb-emerald"></div>
+<div class="grain"></div>
+
+<nav>
+  <div class="nav-pill">
+    <span class="nav-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+      kredo
+    </span>
+    <span class="nav-conn" id="conn"><span class="dot"></span>connecting</span>
+  </div>
+</nav>
+
+<main>
+  <section class="hero reveal">
+    <span class="eyebrow"><span class="pulse"></span>decision playground</span>
+    <h1>Calibrated decisions,<br>rendered <em>live</em>.</h1>
+    <p class="sub">Type a state, shape the questions, watch a decision model answer in a single forward pass — every answer traceable to a verified artifact.</p>
+  </section>
+
+  <div class="bento">
+    <div class="b-left">
+      <!-- state -->
+      <div class="shell reveal"><div class="core">
+        <div class="core-head">
+          <span class="core-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            state
+          </span>
+        </div>
+        <textarea id="state" rows="5" placeholder="I was charged twice for my subscription this month and want a refund.">I was charged twice for my subscription this month and want a refund.</textarea>
+      </div></div>
+
+      <!-- questions -->
+      <div class="shell reveal"><div class="core">
+        <div class="core-head">
+          <span class="core-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.4 2.33c-.7.27-.9.9-.9 1.67v.5M12 17.2v.1"/></svg>
+            questions
+          </span>
+          <button class="btn ghost" id="q-add" style="padding:.35rem .5rem .35rem 1rem; font-size:.78rem;">
+            add question
+            <span class="orb-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          </button>
+        </div>
+        <div id="questions"></div>
+        <div class="btn-row">
+          <button class="btn ghost" id="q-defaults">use model defaults</button>
+          <span style="font-size:.75rem;color:var(--ink-faint);">empty list = model's built-in set</span>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="b-right">
+      <!-- model -->
+      <div class="shell reveal"><div class="core">
+        <div class="core-head">
+          <span class="core-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/></svg>
+            model
+          </span>
+        </div>
+        <div class="models" id="models"><span class="empty">loading…</span></div>
+      </div></div>
+
+      <!-- verification -->
+      <div class="shell reveal"><div class="core seal-card">
+        <div class="core-head">
+          <span class="core-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9.5 12l2 2 3.5-4"/></svg>
+            verification
+          </span>
+        </div>
+        <div id="verify"><span class="empty">select a model</span></div>
+      </div></div>
+
+      <!-- answers -->
+      <div class="shell reveal"><div class="core">
+        <div class="core-head">
+          <span class="core-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M4 19V5M4 19h16"/><path d="M8 15v-3M12.5 15V8M17 15v-5"/></svg>
+            answers
+          </span>
+          <button class="btn" id="decide">
+            decide
+            <span class="orb-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M6 18L18 6M9 6h9v9"/></svg></span>
+          </button>
+        </div>
+        <div id="results"><div class="empty">press decide — probabilities land here</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <div style="height:5rem"></div>
+</main>
+
+<!-- api key overlay -->
+<div class="overlay" id="key-overlay">
+  <div class="shell"><div class="core">
+    <div class="core-head">
+      <span class="core-title">daemon key</span>
+    </div>
+    <div class="field">
+      <label>API key (KREDO_API_KEY)</label>
+      <input type="text" id="key-input" placeholder="leave empty if the daemon has none" autocomplete="off">
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="key-save">
+        connect
+        <span class="orb-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><path d="M6 18L18 6M9 6h9v9"/></svg></span>
+      </button>
+    </div>
+  </div></div>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const state = { models: [], current: null, details: {}, key: localStorage.getItem("kredo_key") || "" };
+
+function headers() {
+  const h = { "content-type": "application/json" };
+  if (state.key) h["authorization"] = "Bearer " + state.key;
+  return h;
+}
+async function api(path, body) {
+  const opts = body ? { method: "POST", headers: headers(), body: JSON.stringify(body) } : { headers: headers() };
+  const res = await fetch(path, opts);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401) { showKeyOverlay(); throw new Error("invalid or missing API key"); }
+    throw new Error(json.error || res.statusText);
+  }
+  return json;
+}
+
+/* ---------- key overlay ---------- */
+function showKeyOverlay() { $("#key-overlay").classList.add("in"); }
+$("#key-save").addEventListener("click", () => {
+  state.key = $("#key-input").value.trim();
+  localStorage.setItem("kredo_key", state.key);
+  $("#key-overlay").classList.remove("in");
+  boot();
+});
+$("#key-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#key-save").click(); });
+
+/* ---------- question editor ---------- */
+let questions = [];
+function questionRow(q) {
+  const kinds = ["choice", "score", "noul"];
+  const el = document.createElement("div");
+  el.className = "q-card";
+  el.innerHTML = `
+    <div class="q-row">
+      <input type="text" class="mini-input q-id" placeholder="id" value="${q.id || ""}">
+      <select class="q-kind">${kinds.map(k => `<option ${k === (q.kind || "choice") ? "selected" : ""}>${k}</option>`).join("")}</select>
+      <button class="q-del" title="remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="q-row"><input type="text" class="mini-input q-prompt" placeholder="ask the model… e.g. What does the user want?" value="${q.prompt || ""}"></div>
+    <div class="q-row q-opt-row" style="display:none">
+      <div class="opt-chips"></div>
+    </div>
+    <div class="q-row q-addopt-row" style="display:none">
+      <input type="text" class="mini-input q-newopt" placeholder="add option + enter">
+    </div>`;
+  const render = () => {
+    const kind = el.querySelector(".q-kind").value;
+    const show = kind === "choice";
+    el.querySelector(".q-opt-row").style.display = show ? "flex" : "none";
+    el.querySelector(".q-addopt-row").style.display = show ? "flex" : "none";
+    const chips = el.querySelector(".opt-chips");
+    chips.innerHTML = "";
+    (el._opts || []).forEach((o, i) => {
+      const c = document.createElement("span");
+      c.className = "opt-chip";
+      c.innerHTML = `${o} <button>×</button>`;
+      c.querySelector("button").addEventListener("click", () => { el._opts.splice(i, 1); render(); });
+      chips.appendChild(c);
+    });
+  };
+  el._opts = (q.options || []).slice();
+  el.querySelector(".q-kind").addEventListener("change", render);
+  el.querySelector(".q-newopt").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.value.trim()) { el._opts.push(e.target.value.trim()); e.target.value = ""; render(); }
+  });
+  el.querySelector(".q-del").addEventListener("click", () => { questions = questions.filter(x => x.el !== el); el.remove(); });
+  el.querySelector(".q-id").addEventListener("input", () => { el._id = el.querySelector(".q-id").value; });
+  el.querySelector(".q-prompt").addEventListener("input", () => { el._prompt = el.querySelector(".q-prompt").value; });
+  el.querySelector(".q-kind").addEventListener("change", () => { el._kind = el.querySelector(".q-kind").value; });
+  render();
+  return el;
+}
+function syncQuestions() {
+  questions = questions.map(q => ({
+    el: q.el,
+    id: q.el.querySelector(".q-id").value,
+    kind: q.el.querySelector(".q-kind").value,
+    prompt: q.el.querySelector(".q-prompt").value,
+    options: q.el._opts.slice(),
+  }));
+}
+function collectedQuestions() {
+  syncQuestions();
+  return questions
+    .filter(q => q.id && q.prompt)
+    .map(({ el, ...q }) => ({
+      id: q.id, type: q.kind, prompt: q.prompt, options: q.options,
+      ...(q.kind === "score" ? { min: 0, max: 3 } : {}),
+    }));
+}
+$("#q-add").addEventListener("click", () => {
+  const el = questionRow({ id: "q" + (questions.length + 1), kind: "choice", options: [] });
+  questions.push({ el });
+  $("#questions").appendChild(el);
+  el.classList.add("in");
+});
+$("#q-defaults").addEventListener("click", () => {
+  questions.forEach(q => q.el.remove());
+  questions = [];
+});
+
+/* ---------- models ---------- */
+async function loadModels() {
+  const tags = await api("/api/tags");
+  state.models = tags.models || [];
+  const wrap = $("#models");
+  wrap.innerHTML = "";
+  for (const m of state.models) {
+    const chip = document.createElement("button");
+    chip.className = "model-chip";
+    const verified = await isVerified(m.model);
+    chip.innerHTML = `<span class="seal ${verified ? "ok" : "no"}"></span>${m.model}`;
+    chip.addEventListener("click", () => selectModel(m.model, chip));
+    wrap.appendChild(chip);
+  }
+  if (state.models.length && !state.current) {
+    const pref = state.models.find(m => m.model === "kredo:triage") || state.models[0];
+    selectModel(pref.model, wrap.children[state.models.indexOf(pref)]);
+  }
+}
+async function isVerified(model) {
+  try {
+    const show = await api("/api/show", { model });
+    state.details[model] = show;
+    return !!(show.details && show.details.verified === "true");
+  } catch { return false; }
+}
+function selectModel(model, chip) {
+  state.current = model;
+  document.querySelectorAll(".model-chip").forEach(c => c.classList.remove("active"));
+  if (chip) chip.classList.add("active");
+  renderVerification(model);
+}
+
+/* ---------- verification seal ---------- */
+function renderVerification(model) {
+  const d = state.details[model];
+  const wrap = $("#verify");
+  if (!d) { wrap.innerHTML = '<span class="empty">select a model</span>'; return; }
+  const verified = d.details && d.details.verified === "true";
+  const prov = d.provenance || {};
+  let html = `<span class="seal ${verified ? "ok" : "no"}"><span class="ring"></span>${verified ? "verified" : "unverified"}</span>`;
+  html += `<div class="prov">
+    <div class="prov-row"><span class="k">dataset</span><span class="v">${esc(prov.dataset || "—")}</span></div>
+    <div class="prov-row"><span class="k">pipeline</span><span class="v">${esc(prov.pipeline || "—")}</span></div>
+    <div class="prov-row"><span class="k">seed</span><span class="v">${prov.seed != null ? prov.seed : "—"}</span></div>
+  </div>`;
+  const entries = Object.entries(prov.metrics || {});
+  if (entries.length) {
+    html += `<div class="metrics">`;
+    for (const [k, v] of entries) {
+      const kind = k.endsWith(".mae") ? "mae" : "acc";
+      const pct = kind === "mae" ? Math.max(0, 1 - v / 3) : v;
+      html += `<div class="metric"><span class="name">${esc(k)}</span><span class="val">${v.toFixed ? v.toFixed(2) : v}</span><span class="bar"><i data-p="${Math.min(1, pct)}"></i></span></div>`;
+    }
+    html += `</div>`;
+  }
+  if (d.verification) {
+    html += `<div class="prov"><div class="prov-row"><span class="k">parity</span><span class="v">±${d.verification.tolerance}</span></div>
+    <div class="prov-row"><span class="k">cases</span><span class="v">${d.verification.cases}</span></div></div>`;
+  }
+  wrap.innerHTML = html;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    wrap.querySelectorAll(".metric").forEach(m => m.classList.add("in"));
+  }));
+}
+
+/* ---------- decide ---------- */
+$("#decide").addEventListener("click", async () => {
+  const btn = $("#decide");
+  const qs = collectedQuestions();
+  btn.disabled = true;
+  try {
+    const body = { model: state.current || "kredo", state: $("#state").value };
+    if (qs.length) body.questions = qs;
+    const resp = await api("/api/decide", body);
+    renderAnswers(resp);
+  } catch (e) {
+    $("#results").innerHTML = `<div class="err">${esc(String(e.message || e))}</div>`;
+  } finally { btn.disabled = false; }
+});
+function esc(s) { const d = document.createElement("div"); d.textContent = String(s); return d.innerHTML; }
+
+function renderAnswers(resp) {
+  const wrap = $("#results");
+  wrap.innerHTML = "";
+  const list = document.createElement("div");
+  list.className = "answers";
+  resp.answers.forEach((a, idx) => {
+    const el = document.createElement("div");
+    el.className = "answer";
+    el.style.transitionDelay = (idx * 90) + "ms";
+    if (a.kind === "choice" && a.probabilities.length) {
+      const top = a.probabilities.reduce((x, y) => (y.p > x.p ? y : x));
+      let rows = a.probabilities.map(p => `
+        <div class="dist-row"><span class="lbl">${esc(p.label)}</span>
+        <span class="track"><i data-p="${p.p}"></i></span>
+        <span class="val">${p.p.toFixed(2)}</span></div>`).join("");
+      el.innerHTML = `<div class="a-head"><span class="a-id">${esc(a.id)}</span><span class="a-top"><b>${esc(top.label)}</b> ${top.p.toFixed(2)}</span></div><div class="dist">${rows}</div>`;
+    } else if (a.kind === "score" && a.score) {
+      el.innerHTML = `<div class="a-head"><span class="a-id">${esc(a.id)}</span><span class="a-top">${a.score.value.toFixed(2)} / ${a.score.max}</span></div>
+        <div class="gauge"><i data-p="${a.score.normalized}"></i></div>`;
+    } else if (a.kind === "noul" && a.p != null) {
+      el.innerHTML = `<div class="a-head"><span class="a-id">${esc(a.id)}</span><span class="a-top">${(a.p * 100).toFixed(1)}%</span></div>
+        <div class="track"><i data-p="${a.p}"></i></div>`;
+    }
+    list.appendChild(el);
+  });
+  const chips = document.createElement("div");
+  chips.className = "chips";
+  const r = resp.routing || {};
+  chips.innerHTML = `
+    <span class="chip">resolved <b>${esc(r.resolved || resp.model)}</b></span>
+    ${r.script ? `<span class="chip">script <b>${esc(r.script)}</b></span>` : ""}
+    ${r.language ? `<span class="chip">lang <b>${esc(r.language)}</b></span>` : ""}
+    <span class="chip">infer <b>${(resp.infer_ms || 0).toFixed ? (resp.infer_ms || 0).toFixed(1) : resp.infer_ms} ms</b></span>`;
+  wrap.appendChild(list);
+  wrap.appendChild(chips);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    list.querySelectorAll(".answer").forEach(a => a.classList.add("in"));
+    wrap.querySelectorAll(".track i, .gauge i").forEach(b => { b.style.transform = "scaleX(" + Math.max(0.005, b.dataset.p) + ")"; });
+  }));
+}
+
+/* ---------- boot ---------- */
+async function boot() {
+  const conn = $("#conn");
+  try {
+    await loadModels();
+    conn.className = "nav-conn ok"; conn.innerHTML = '<span class="dot"></span>daemon live';
+  } catch (e) {
+    conn.className = "nav-conn bad"; conn.innerHTML = '<span class="dot"></span>' + esc(e.message || "offline");
+    if (String(e.message).includes("API key")) showKeyOverlay();
+  }
+}
+
+/* ---------- scroll reveals ---------- */
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(en => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+}, { threshold: 0.08 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+boot();
+</script>
+</body>
+</html>

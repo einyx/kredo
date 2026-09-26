@@ -8,6 +8,7 @@
 pub mod config;
 pub mod limit;
 pub mod metrics;
+pub mod ui;
 
 pub use config::{Config, LogFormat};
 
@@ -467,7 +468,30 @@ async fn api_show(
         serde_json::Value::Number(m.manifest.max_seq_len.into()),
     );
     details.insert("description".into(), m.manifest.description.clone().into());
+    let verified = m
+        .manifest
+        .verification
+        .as_ref()
+        .map(|v| v.fixture_digest.len() == 64);
+    details.insert(
+        "verified".into(),
+        serde_json::Value::Bool(verified.unwrap_or(false)),
+    );
     let full = m.manifest.full_name();
+    let provenance = m
+        .manifest
+        .provenance
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|e| SrvError::Api(ApiError::new(e.to_string())))?;
+    let verification = m
+        .manifest
+        .verification
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|e| SrvError::Api(ApiError::new(e.to_string())))?;
     Ok(Json(ShowResponse {
         name: m.manifest.name,
         model: full,
@@ -475,6 +499,8 @@ async fn api_show(
         size: m.size,
         details,
         questions: m.manifest.questions,
+        provenance,
+        verification,
     }))
 }
 
@@ -656,6 +682,9 @@ pub fn router(state: Arc<ServerState>) -> Router {
         .layer(body_limit)
         .layer(timeout)
         .with_state(state.clone());
+
+    // UI routes are stateless; merge after the stateful app is resolved.
+    let app = Router::new().merge(ui::routes()).merge(app);
 
     if state.cfg.cors {
         app.layer(tower_http::cors::CorsLayer::permissive())

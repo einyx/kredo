@@ -1,0 +1,28 @@
+{
+  "name": "kredo-mcp",
+  "version": "0.2.0",
+  "description": "kredo decision models as MCP tools for Claude, opencode and other MCP clients. npx kredo-mcp install",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/einyx/kredo"
+  },
+  "bin": {
+    "kredo-mcp": "./index.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "claude",
+    "opencode",
+    "decision-models",
+    "kredo"
+  ]
+}

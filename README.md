@@ -77,6 +77,18 @@ cargo install --path crates/kredo
 Prebuilt binaries and a `curl | sh` installer are attached to GitHub
 Releases. Docker: `docker run -p 21435:21435 ghcr.io/einyx/kredo`.
 
+## For agents
+
+Expose kredo to Claude Code, Claude Desktop, opencode and other MCP clients
+in one line:
+
+```sh
+npx kredo-mcp install        # registers the kredo MCP server everywhere
+```
+
+Tools: `kredo_decide`, `kredo_list_models`, `kredo_describe_model` — tool
+descriptions surface verification status, so agents prefer verified models.
+
 ## The API
 
 TypeSafe-compatible: `POST /v1/systemone`, `POST /v1/decisions`,
