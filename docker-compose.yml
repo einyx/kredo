@@ -2,9 +2,9 @@
 #   docker compose up -d
 # API on http://localhost:21435 behind the health-checked container.
 services:
-  jeff:
+  kredo:
     build: .
-    image: jeff:local
+    image: kredo:local
     restart: unless-stopped
     ports:
       - "21435:21435"
@@ -18,7 +18,7 @@ services:
       # KREDO_TLS_CERT: /certs/fullchain.pem
       # KREDO_TLS_KEY: /certs/privkey.pem
     volumes:
-      - jeff-models:/data/models
+      - kredo-models:/data/models
     healthcheck:
       test: ["CMD", "kredo", "status"]
       interval: 30s
@@ -26,4 +26,4 @@ services:
       retries: 3
 
 volumes:
-  jeff-models:
+  kredo-models:
