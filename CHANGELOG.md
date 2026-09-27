@@ -11,6 +11,10 @@ All notable changes to kredo are documented here. Format based on
   `rust:1-slim` is now trixie-based, so the runtime base moved from
   `debian:bookworm-slim` to `debian:trixie-slim` to match.
 
+### Changed
+- `kredo-mcp` reads its version from `package.json` instead of a hardcoded
+  constant, so release bumps cannot drift.
+
 ## [0.2.2] - 2026-09-27
 
 ### Changed

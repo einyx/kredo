@@ -20,7 +20,7 @@ const os = require("os");
 const path = require("path");
 const https = require("https");
 
-const VERSION = "0.2.3";
+const VERSION = require("./package.json").version;
 const REPO = "einyx/kredo";
 const BIN_DIR = path.join(os.homedir(), ".kredo", "bin");
 
