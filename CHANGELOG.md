@@ -4,7 +4,16 @@ All notable changes to kredo are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versioning follows
 [SemVer](https://semver.org/).
 
-## [0.2.0] - unreleased
+## [0.2.1] - 2026-09-27
+
+### Fixed
+- npm release step skipped cleanly when `NPM_TOKEN` is not configured.
+- Docker build installs `pkg-config`/`libssl-dev` for rustls.
+- Better error (and UI note) when arbitrary questions are sent to a trained
+  multi-head model: the built-in question set is listed in the message, and
+  the playground shows trained heads read-only.
+
+## [0.2.0] - 2026-09-27
 
 ### Added
 - `kredo ui`: embedded decision playground served at `/ui` — model picker

@@ -77,6 +77,22 @@ cargo install --path crates/kredo
 Prebuilt binaries and a `curl | sh` installer are attached to GitHub
 Releases. Docker: `docker run -p 21435:21435 ghcr.io/einyx/kredo`.
 
+## Playground
+
+Start the daemon and open the embedded UI — no frontend build, no network
+beyond the model files, fonts and icons ship inside the binary:
+
+```sh
+kredo serve            # then open http://127.0.0.1:21435/ui
+# or
+kredo ui               # same thing, prints the URL
+```
+
+Pick a model, inspect its verification seal and provenance, edit structured
+questions (zero-shot models accept arbitrary ones; trained models show their
+built-in head set read-only), and run decisions with animated calibrated
+probability bars.
+
 ## For agents
 
 Expose kredo to Claude Code, Claude Desktop, opencode and other MCP clients

@@ -12,6 +12,12 @@ use thiserror::Error;
 pub enum DecisionError {
     #[error("question `{0}` is a `{1}` question but the model head is not compatible")]
     KindMismatch(String, &'static str),
+    #[error(
+        "this trained model answers only its built-in question set (ids: {0}); \
+         it cannot answer arbitrary questions — omit `questions` to use the built-ins, \
+         or use a zero-shot model (kredo:en, kredo:multilingual, nli) for custom questions"
+    )]
+    TrainedQuestionSet(String),
     #[error("choice question `{0}` has fewer than 2 options")]
     TooFewOptions(String),
 }
@@ -102,9 +108,15 @@ impl DecisionSpec {
             }
             HeadLayout::MultiHead { heads } => {
                 for q in questions {
-                    let head = heads.iter().find(|h| h.question == q.id).ok_or_else(|| {
-                        DecisionError::KindMismatch(q.id.clone(), "no matching head")
-                    })?;
+                    let Some(_head) = heads.iter().find(|h| h.question == q.id) else {
+                        let supported = heads
+                            .iter()
+                            .map(|h| h.question.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        return Err(DecisionError::TrainedQuestionSet(supported));
+                    };
+                    let head = heads.iter().find(|h| h.question == q.id).unwrap();
                     match q.kind {
                         QuestionKind::Choice => {
                             if q.options.len() < 2 {

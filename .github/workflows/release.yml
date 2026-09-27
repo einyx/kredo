@@ -58,6 +58,8 @@ jobs:
 
   npm:
     runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN_PRESENT: ${{ secrets.NPM_TOKEN != '' }}
     defaults:
       run:
         working-directory: npm
@@ -68,6 +70,7 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
       - name: Publish
+        if: env.NPM_TOKEN_PRESENT == 'true'
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -213,6 +213,10 @@ select:focus { border-color: rgba(139,92,246,.45); }
 .chip b { color: var(--ink-dim); font-weight: 500; }
 
 .empty { color: var(--ink-faint); font-size: .86rem; padding: 1.4rem 0; text-align: center; }
+.editor-note { font-size: .78rem; color: var(--ink-faint); line-height: 1.55; padding: .7rem .9rem; border: 1px dashed var(--hairline-soft); border-radius: .9rem; background: rgba(255,255,255,.02); }
+.editor-note b { color: var(--ink-dim); font-weight: 500; }
+.btn[disabled] { opacity: .4; }
+button:disabled { pointer-events: auto; cursor: not-allowed; }
 .err { color: var(--amber); font-size: .85rem; padding: 1rem 1.2rem; border: 1px solid rgba(251,191,36,.25); background: rgba(251,191,36,.05); border-radius: 1rem; white-space: pre-wrap; }
 
 /* key overlay */
@@ -290,9 +294,9 @@ select:focus { border-color: rgba(139,92,246,.45); }
           </button>
         </div>
         <div id="questions"></div>
+        <div id="editor-note" class="editor-note"></div>
         <div class="btn-row">
-          <button class="btn ghost" id="q-defaults">use model defaults</button>
-          <span style="font-size:.75rem;color:var(--ink-faint);">empty list = model's built-in set</span>
+          <button class="btn ghost" id="q-defaults" style="display:none">use model defaults</button>
         </div>
       </div></div>
     </div>
@@ -362,7 +366,7 @@ select:focus { border-color: rgba(139,92,246,.45); }
 <script>
 "use strict";
 const $ = (s) => document.querySelector(s);
-const state = { models: [], current: null, details: {}, key: localStorage.getItem("kredo_key") || "" };
+const state = { models: [], current: null, details: {}, locked: false, key: localStorage.getItem("kredo_key") || "" };
 
 function headers() {
   const h = { "content-type": "application/json" };
@@ -496,6 +500,50 @@ function selectModel(model, chip) {
   document.querySelectorAll(".model-chip").forEach(c => c.classList.remove("active"));
   if (chip) chip.classList.add("active");
   renderVerification(model);
+  renderQuestionEditor(model);
+}
+
+/* ---------- question editor (model-aware) ---------- */
+function renderQuestionEditor(model) {
+  const d = state.details[model];
+  const engine = (d && d.details && d.details.engine) || "";
+  const builtins = (d && d.questions) || [];
+  const wrap = $("#questions");
+  questions.forEach(q => q.el.remove());
+  questions = [];
+  state.locked = engine === "onnx-multihead";
+
+  if (state.locked) {
+    // Trained model: heads are fixed; show them read-only.
+    builtins.forEach(q => {
+      const opts = q.kind === "choice" ? q.options.join(" · ")
+        : q.kind === "score" ? `scale ${q.min}–${q.max}`
+        : "yes / no";
+      const el = document.createElement("div");
+      el.className = "q-card";
+      el.style.opacity = ".75";
+      el.innerHTML = `
+        <div class="q-row"><span class="opt-chip" style="border-color:rgba(52,211,153,.35);color:var(--ink);">${esc(q.id)}</span>
+          <span style="font-size:.72rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.1em;">${q.kind}</span></div>
+        <div class="q-row"><span style="font-size:.84rem;color:var(--ink-dim);">${esc(q.prompt)}</span></div>
+        <div class="q-row"><span class="opt-chips"><span class="opt-chip">${esc(opts)}</span></span></div>`;
+      wrap.appendChild(el);
+    });
+    $("#editor-note").innerHTML =
+      "🔒 trained model — this question set is <b>built into the model</b> and can't be changed. " +
+      "For arbitrary questions use a zero-shot model (<b>kredo:en</b>, <b>nli</b>).";
+    $("#q-add").disabled = true;
+  } else {
+    // Zero-shot model: any questions work; prefill built-ins as a starting point.
+    builtins.forEach(q => {
+      const el = questionRow(q);
+      questions.push({ el });
+      wrap.appendChild(el);
+    });
+    $("#editor-note").innerHTML =
+      "zero-shot model — <b>any</b> questions work. Empty list = the model's built-in set above.";
+    $("#q-add").disabled = false;
+  }
 }
 
 /* ---------- verification seal ---------- */
@@ -534,7 +582,7 @@ function renderVerification(model) {
 /* ---------- decide ---------- */
 $("#decide").addEventListener("click", async () => {
   const btn = $("#decide");
-  const qs = collectedQuestions();
+  const qs = state.locked ? [] : collectedQuestions();
   btn.disabled = true;
   try {
     const body = { model: state.current || "kredo", state: $("#state").value };
