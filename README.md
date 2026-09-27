@@ -99,7 +99,17 @@ Expose kredo to Claude Code, Claude Desktop, opencode and other MCP clients
 in one line:
 
 ```sh
-npx kredo-mcp install        # registers the kredo MCP server everywhere
+npx @einyx/kredo-mcp install   # registers the kredo MCP server everywhere
+```
+
+The package is published to GitHub Packages, so if you've never used the
+`@einyx` scope, point npx at it first (any GitHub account can read; a
+classic PAT with `read:packages` works):
+
+```sh
+# ~/.npmrc
+@einyx:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=<YOUR_GITHUB_TOKEN>
 ```
 
 Tools: `kredo_decide`, `kredo_list_models`, `kredo_describe_model` — tool

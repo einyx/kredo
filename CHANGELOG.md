@@ -4,6 +4,13 @@ All notable changes to kredo are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.2.2] - 2026-09-27
+
+### Changed
+- npm package moved to GitHub Packages as `@einyx/kredo-mcp` (publishes with
+  the built-in `GITHUB_TOKEN`; see README for one-time client setup).
+- Docker build installs `g++` (release image link needs `libstdc++`).
+
 ## [0.2.1] - 2026-09-27
 
 ### Fixed
@@ -23,8 +30,8 @@ All notable changes to kredo are documented here. Format based on
 - `kredo mcp`: Model Context Protocol stdio server exposing
   `kredo_decide`, `kredo_list_models` and `kredo_describe_model`; tool
   descriptions surface verification status.
-- `kredo-mcp` npm package: `npx kredo-mcp install` registers the kredo MCP
-  server with Claude Code, Claude Desktop and opencode; `npx kredo-mcp`
+- `kredo-mcp` npm package: `npx @einyx/kredo-mcp install` registers the kredo MCP
+  server with Claude Code, Claude Desktop and opencode; `npx @einyx/kredo-mcp`
   runs the server, downloading the release binary on first use.
 
 ## [0.1.0] - unreleased
