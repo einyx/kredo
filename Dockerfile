@@ -1,6 +1,9 @@
 # kredo — production image (CPU).
 # The ort download-binaries feature statically links ONNX Runtime, so the
 # runtime image needs no native deps beyond the base.
+# Keep build and runtime on the same Debian release: rust:1-slim follows
+# stable Debian (trixie, glibc 2.39+), so the runtime must be trixie too —
+# a bookworm runtime fails with `GLIBC_2.39 not found`.
 FROM rust:1-slim AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends pkg-config libssl-dev g++ \
@@ -9,7 +12,7 @@ WORKDIR /src
 COPY . .
 RUN cargo build --release -p kredo
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

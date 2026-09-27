@@ -4,6 +4,13 @@ All notable changes to kredo are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.2.3] - 2026-09-27
+
+### Fixed
+- Docker image did not start (`GLIBC_2.39 not found`): build stage
+  `rust:1-slim` is now trixie-based, so the runtime base moved from
+  `debian:bookworm-slim` to `debian:trixie-slim` to match.
+
 ## [0.2.2] - 2026-09-27
 
 ### Changed
