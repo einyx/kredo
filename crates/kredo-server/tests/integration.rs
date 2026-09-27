@@ -43,6 +43,7 @@ impl TestDaemon {
                         template: String::new(),
                         positive_labels: vec![],
                         id2label: Default::default(),
+                        temperature: None,
                     },
                 },
                 questions: vec![kredo_api::Question {

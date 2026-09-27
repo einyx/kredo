@@ -49,12 +49,26 @@ struct Loaded {
     engine: Arc<Mutex<Box<dyn Engine>>>,
     name: String,
     full_name: String,
-    questions: Vec<Question>,
     size: u64,
     expires_at: Instant,
     /// Per-model inference pool.
     permits: Arc<Semaphore>,
 }
+
+/// Rolling shadow-evaluation statistics.
+#[derive(Default)]
+struct ShadowStats {
+    /// Last served model seen.
+    base: String,
+    n: u64,
+    agree: u64,
+    per_question: HashMap<String, (u64, u64)>,
+    base_ms_sum: f64,
+    shadow_ms_sum: f64,
+    samples: std::collections::VecDeque<serde_json::Value>,
+}
+
+const SHADOW_SAMPLES: usize = 20;
 
 pub struct ServerState {
     registry: Registry,
@@ -62,6 +76,11 @@ pub struct ServerState {
     loaded: Mutex<HashMap<String, Loaded>>,
     limiter: limit::RateLimiter,
     metrics: Arc<metrics::Metrics>,
+    /// Candidate model tag under shadow evaluation (None = off).
+    shadow_model: Mutex<Option<String>>,
+    /// Daemon-level default model (what bare `/v1/systemone` resolves to).
+    default_model: Mutex<Option<String>>,
+    shadow_stats: Mutex<ShadowStats>,
 }
 
 impl ServerState {
@@ -86,6 +105,9 @@ impl ServerState {
             cfg,
             loaded: Mutex::new(HashMap::new()),
             metrics: metrics::Metrics::new(),
+            shadow_model: Mutex::new(None),
+            default_model: Mutex::new(None),
+            shadow_stats: Mutex::new(ShadowStats::default()),
         })
     }
 
@@ -175,7 +197,6 @@ impl ServerState {
                 engine: Arc::new(Mutex::new(engine)),
                 name: local.manifest.name.clone(),
                 full_name: local.manifest.full_name(),
-                questions: local.manifest.questions.clone(),
                 size: local.size,
                 expires_at: Instant::now() + self.cfg.keep_alive,
                 permits,
@@ -203,7 +224,7 @@ impl ServerState {
 // ---------------------------------------------------------------------------
 
 async fn decide_core(
-    state: &ServerState,
+    state: &Arc<ServerState>,
     model_spec: Option<&str>,
     state_value: &serde_json::Value,
     questions: Option<Vec<Question>>,
@@ -213,10 +234,18 @@ async fn decide_core(
     if text.len() > state.cfg.body_limit {
         return Err(ApiError::new("state too large").into());
     }
-    let spec = model_spec.unwrap_or("kredo");
+    let spec: String = match model_spec {
+        Some(s) => s.to_string(),
+        None => state
+            .default_model
+            .lock()
+            .await
+            .clone()
+            .unwrap_or_else(|| "kredo".to_string()),
+    };
 
     let route_start = Instant::now();
-    let manifest = state.manifest_of(spec)?;
+    let manifest = state.manifest_of(&spec)?;
     let resolved = match &manifest.router {
         Some(router) => lang::route(&text, &router.en, &router.multilingual).tag,
         None => manifest.full_name(),
@@ -224,42 +253,36 @@ async fn decide_core(
     let script = lang::detect_script(&text);
     let route_ms = route_start.elapsed().as_secs_f64() * 1000.0;
 
-    state.get_loaded(&resolved).await?;
-
-    // Snapshot engine handle, permit pool and default questions without
-    // holding the map lock across inference.
-    let (engine, permits, name, questions) = {
-        let loaded = state.loaded.lock().await;
-        let entry = loaded
-            .get(&resolved)
-            .ok_or_else(|| SrvError::Api(ApiError::new(format!("model {resolved} vanished"))))?;
-        let questions = questions.unwrap_or_else(|| entry.questions.clone());
-        (
-            entry.engine.clone(),
-            entry.permits.clone(),
-            entry.name.clone(),
-            questions,
-        )
+    let questions = match questions {
+        Some(q) => q,
+        None => state.manifest_of(&spec)?.questions,
     };
 
-    let infer_start = Instant::now();
-    let _permit = tokio::time::timeout(Duration::from_secs(30), permits.acquire_owned())
-        .await
-        .map_err(|_| busy_error(&resolved))?
-        .map_err(|_| busy_error(&resolved))?;
-    let answers = {
-        let eng = engine.lock().await;
-        eng.decide(&text, &questions)?
-    };
-    let infer_ms = infer_start.elapsed().as_secs_f64();
+    let (name, answers, infer_ms) = run_model(state, &resolved, &text, &questions).await?;
+    let base_ms = infer_ms * 1000.0;
+
     state
         .metrics
-        .inference_duration
-        .observe(Duration::from_secs_f64(infer_ms));
-    state
-        .metrics
-        .decisions_total
-        .fetch_add(1, Ordering::Relaxed);
+        .record_decision(&resolved, Duration::from_secs_f64(infer_ms));
+
+    // Fire-and-forget shadow evaluation (never blocks or fails the request).
+    let shadow_spec = state.shadow_model.lock().await.clone();
+    if let Some(candidate) = shadow_spec {
+        if candidate != resolved {
+            let st = state.clone();
+            let text = text.clone();
+            let questions = questions.clone();
+            let base = resolved.clone();
+            let answers = answers.clone();
+            tokio::spawn(async move {
+                if let Err(e) =
+                    shadow_eval(&st, &candidate, &base, &text, &answers, &questions, base_ms).await
+                {
+                    tracing::debug!(model = %candidate, error = %e, "shadow eval failed");
+                }
+            });
+        }
+    }
 
     let language = lang::route(&text, "en", "multi").language;
     let routing = Routing {
@@ -269,6 +292,125 @@ async fn decide_core(
         route_ms,
     };
     Ok((name, answers, routing))
+}
+
+/// Resolve (loading if needed), acquire a permit and run one decision.
+async fn run_model(
+    state: &Arc<ServerState>,
+    resolved: &str,
+    text: &str,
+    questions: &[Question],
+) -> SrvResult<(String, Vec<kredo_api::Answer>, f64)> {
+    state.get_loaded(resolved).await?;
+
+    // Snapshot engine handle and permit pool without holding the map lock
+    // across inference.
+    let (engine, permits, name) = {
+        let loaded = state.loaded.lock().await;
+        let entry = loaded
+            .get(resolved)
+            .ok_or_else(|| SrvError::Api(ApiError::new(format!("model {resolved} vanished"))))?;
+        (
+            entry.engine.clone(),
+            entry.permits.clone(),
+            entry.name.clone(),
+        )
+    };
+
+    let infer_start = Instant::now();
+    let _permit = tokio::time::timeout(Duration::from_secs(30), permits.acquire_owned())
+        .await
+        .map_err(|_| busy_error(resolved))?
+        .map_err(|_| busy_error(resolved))?;
+    let answers = {
+        let eng = engine.lock().await;
+        eng.decide(text, questions)?
+    };
+    let infer_ms = infer_start.elapsed().as_secs_f64();
+    Ok((name, answers, infer_ms))
+}
+
+/// Run the shadow candidate against one live input and update agreement
+/// stats. Errors are logged by the caller; they must never surface.
+async fn shadow_eval(
+    state: &Arc<ServerState>,
+    candidate_spec: &str,
+    base: &str,
+    text: &str,
+    base_answers: &[kredo_api::Answer],
+    questions: &[Question],
+    base_ms: f64,
+) -> SrvResult<()> {
+    let manifest = state.manifest_of(candidate_spec)?;
+    let shadow_resolved = manifest.full_name();
+    let (_, shadow_answers, shadow_ms) =
+        run_model(state, &shadow_resolved, text, questions).await?;
+    let shadow_ms = shadow_ms * 1000.0;
+
+    let base_by_id: HashMap<&str, &kredo_api::Answer> =
+        base_answers.iter().map(|a| (a.id.as_str(), a)).collect();
+
+    let mut per_q: Vec<(String, bool)> = Vec::new();
+    let mut agree_all = true;
+    for sa in &shadow_answers {
+        let Some(ba) = base_by_id.get(sa.id.as_str()) else {
+            continue;
+        };
+        let same = answers_agree(ba, sa);
+        agree_all &= same;
+        per_q.push((sa.id.clone(), same));
+    }
+
+    let mut stats = state.shadow_stats.lock().await;
+    stats.base = base.to_string();
+    stats.n += 1;
+    if agree_all {
+        stats.agree += 1;
+    }
+    for (qid, same) in per_q {
+        let e = stats.per_question.entry(qid).or_insert((0, 0));
+        e.0 += 1;
+        if same {
+            e.1 += 1;
+        }
+    }
+    stats.shadow_ms_sum += shadow_ms;
+    stats.base_ms_sum += base_ms;
+    if stats.samples.len() >= SHADOW_SAMPLES {
+        stats.samples.pop_front();
+    }
+    if !agree_all {
+        stats.samples.push_back(serde_json::json!({
+            "input": text,
+            "base": base_answers.iter().map(|a| serde_json::to_value(a).unwrap_or_default()).collect::<Vec<_>>(),
+            "shadow": shadow_answers.iter().map(|a| serde_json::to_value(a).unwrap_or_default()).collect::<Vec<_>>(),
+        }));
+    }
+    drop(stats);
+
+    state
+        .metrics
+        .record_shadow(agree_all, Duration::from_secs_f64(shadow_ms / 1000.0));
+    Ok(())
+}
+
+/// Do two answers agree? Same top label for `choice`; same side of 0.5 for
+/// `noul`; within 0.05 of each other's normalized value for `score`.
+fn answers_agree(a: &kredo_api::Answer, b: &kredo_api::Answer) -> bool {
+    match a.kind {
+        kredo_api::QuestionKind::Choice => match (a.top(), b.top()) {
+            (Some(x), Some(y)) => x.label == y.label,
+            _ => false,
+        },
+        kredo_api::QuestionKind::Noul => match (a.p, b.p) {
+            (Some(x), Some(y)) => (x >= 0.5) == (y >= 0.5),
+            _ => false,
+        },
+        kredo_api::QuestionKind::Score => match (&a.score, &b.score) {
+            (Some(x), Some(y)) => (x.normalized - y.normalized).abs() < 0.05,
+            _ => false,
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +619,14 @@ async fn api_show(
         "verified".into(),
         serde_json::Value::Bool(verified.unwrap_or(false)),
     );
+    // True when any head carries a fitted calibration temperature.
+    let calibrated = match &m.manifest.decision.layout {
+        kredo_decision::HeadLayout::MultiHead { heads } => {
+            heads.iter().any(|h| h.temperature.is_some())
+        }
+        kredo_decision::HeadLayout::Pairwise { temperature, .. } => temperature.is_some(),
+    };
+    details.insert("calibrated".into(), serde_json::Value::Bool(calibrated));
     let full = m.manifest.full_name();
     let provenance = m
         .manifest
@@ -547,6 +697,90 @@ async fn api_stop(
     check_auth(&state, &headers).await?;
     state.loaded.lock().await.remove(&req.model);
     Ok(StatusCode::OK)
+}
+
+async fn api_shadow_start_stop(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(req): Json<kredo_api::ShadowRequest>,
+) -> SrvResult<Json<kredo_api::ShadowStatus>> {
+    check_auth(&state, &headers).await?;
+    if let Some(spec) = &req.model {
+        // Fail fast on an unknown candidate.
+        state.manifest_of(spec)?;
+    }
+    *state.shadow_model.lock().await = req.model;
+    shadow_status(&state).await
+}
+
+async fn api_shadow_status(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> SrvResult<Json<kredo_api::ShadowStatus>> {
+    check_auth(&state, &headers).await?;
+    shadow_status(&state).await
+}
+
+async fn shadow_status(state: &Arc<ServerState>) -> SrvResult<Json<kredo_api::ShadowStatus>> {
+    Ok(Json(kredo_api::ShadowStatus {
+        shadow: state.shadow_model.lock().await.clone(),
+        promoted: state.default_model.lock().await.clone(),
+    }))
+}
+
+async fn api_shadow_report(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> SrvResult<Json<kredo_api::ShadowReport>> {
+    check_auth(&state, &headers).await?;
+    let stats = state.shadow_stats.lock().await;
+    let shadow = state.shadow_model.lock().await.clone();
+    let Some(model) = shadow else {
+        return Err(ApiError::new("shadow evaluation is not running").into());
+    };
+    let (n, agree) = (stats.n, stats.agree);
+    let questions = stats
+        .per_question
+        .iter()
+        .map(|(q, (n, a))| kredo_api::ShadowQuestionStat {
+            question: q.clone(),
+            n: *n,
+            agree: *a,
+        })
+        .collect();
+    Ok(Json(kredo_api::ShadowReport {
+        model,
+        n,
+        agree,
+        agreement: if n > 0 { agree as f64 / n as f64 } else { 0.0 },
+        questions,
+        base_ms: if n > 0 {
+            stats.base_ms_sum / n as f64
+        } else {
+            0.0
+        },
+        shadow_ms: if n > 0 {
+            stats.shadow_ms_sum / n as f64
+        } else {
+            0.0
+        },
+        samples: stats.samples.iter().cloned().collect(),
+        promoted: state.default_model.lock().await.clone(),
+    }))
+}
+
+async fn api_promote(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(req): Json<kredo_api::PromoteRequest>,
+) -> SrvResult<Json<kredo_api::ShadowStatus>> {
+    check_auth(&state, &headers).await?;
+    if let Some(spec) = &req.model {
+        // Fail fast on an unknown candidate.
+        state.manifest_of(spec)?;
+    }
+    *state.default_model.lock().await = req.model;
+    shadow_status(&state).await
 }
 
 async fn api_pull(
@@ -678,6 +912,12 @@ pub fn router(state: Arc<ServerState>) -> Router {
         .route("/api/ps", get(api_ps))
         .route("/api/delete", post(api_delete))
         .route("/api/stop", post(api_stop))
+        .route(
+            "/api/shadow",
+            post(api_shadow_start_stop).get(api_shadow_status),
+        )
+        .route("/api/shadow/report", get(api_shadow_report))
+        .route("/api/promote", post(api_promote))
         .layer(middleware::from_fn_with_state(state.clone(), observability))
         .layer(body_limit)
         .layer(timeout)

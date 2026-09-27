@@ -27,6 +27,7 @@ fn pairwise_nli(id2label: &[(&str, &str)]) -> HeadLayout {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect(),
+        temperature: None,
     }
 }
 
@@ -38,6 +39,7 @@ fn placeholder_spec() -> kredo_decision::DecisionSpec {
             template: String::new(),
             positive_labels: vec![],
             id2label: Default::default(),
+            temperature: None,
         },
     }
 }
@@ -183,26 +185,31 @@ fn library() -> Vec<Manifest> {
                                 "praise".into(),
                             ],
                             output: Some("head_intent".into()),
+                            temperature: None,
                         },
                         kredo_decision::Head {
                             question: "is_urgent".into(),
                             labels: vec!["no".into(), "yes".into()],
                             output: Some("head_is_urgent".into()),
+                            temperature: None,
                         },
                         kredo_decision::Head {
                             question: "frustration".into(),
                             labels: vec!["low".into(), "high".into()],
                             output: Some("head_frustration".into()),
+                            temperature: None,
                         },
                         kredo_decision::Head {
                             question: "refund_requested".into(),
                             labels: vec!["no".into(), "yes".into()],
                             output: Some("head_refund_requested".into()),
+                            temperature: None,
                         },
                         kredo_decision::Head {
                             question: "churn_risk".into(),
                             labels: vec!["no".into(), "yes".into()],
                             output: Some("head_churn_risk".into()),
+                            temperature: None,
                         },
                     ],
                 },
@@ -275,11 +282,13 @@ fn library() -> Vec<Manifest> {
                                 "Technical Support".into(),
                             ],
                             output: Some("head_queue".into()),
+                            temperature: None,
                         },
                         kredo_decision::Head {
                             question: "is_urgent".into(),
                             labels: vec!["no".into(), "yes".into()],
                             output: Some("head_is_urgent".into()),
+                            temperature: None,
                         },
                     ],
                 },
@@ -374,10 +383,12 @@ fn library() -> Vec<Manifest> {
                 ],
             ),
             decision: kredo_decision::DecisionSpec {
+                // Verified against the upstream config:
+                // label2id = {contradiction: 0, entailment: 1, neutral: 2}.
                 layout: pairwise_nli(&[
-                    ("0", "entailment"),
-                    ("1", "neutral"),
-                    ("2", "contradiction"),
+                    ("0", "contradiction"),
+                    ("1", "entailment"),
+                    ("2", "neutral"),
                 ]),
             },
             questions: jeff_questions("English"),

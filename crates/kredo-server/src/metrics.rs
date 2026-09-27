@@ -73,11 +73,44 @@ pub struct Metrics {
     pub request_duration: Histogram,
     #[allow(private_interfaces)]
     pub inference_duration: Histogram,
+    /// Decisions and inference latency broken down by resolved model tag.
+    pub by_model: Mutex<BTreeMap<String, ModelStats>>,
+    /// Shadow-model evaluation counters.
+    pub shadow_total: AtomicU64,
+    pub shadow_agree_total: AtomicU64,
+    #[allow(private_interfaces)]
+    pub shadow_duration: Histogram,
+}
+
+/// Per-model decision counters and latency.
+#[derive(Default)]
+pub struct ModelStats {
+    pub decisions: u64,
+    pub duration: Histogram,
 }
 
 impl Metrics {
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// Record a completed decision for `model`.
+    pub fn record_decision(&self, model: &str, duration: Duration) {
+        self.decisions_total.fetch_add(1, Ordering::Relaxed);
+        self.inference_duration.observe(duration);
+        let mut map = self.by_model.lock().unwrap();
+        let stats = map.entry(model.to_string()).or_default();
+        stats.decisions += 1;
+        stats.duration.observe(duration);
+    }
+
+    /// Record a shadow-model evaluation.
+    pub fn record_shadow(&self, agree: bool, duration: Duration) {
+        self.shadow_total.fetch_add(1, Ordering::Relaxed);
+        if agree {
+            self.shadow_agree_total.fetch_add(1, Ordering::Relaxed);
+        }
+        self.shadow_duration.observe(duration);
     }
 
     pub fn render(&self) -> String {
@@ -122,6 +155,67 @@ impl Metrics {
             "Decision inference latency (incl. queueing).",
             &mut out,
         );
+        {
+            let map = self.by_model.lock().unwrap();
+            if !map.is_empty() {
+                out.push_str("# HELP kredo_decisions_by_model_total Decisions per model.\n# TYPE kredo_decisions_by_model_total counter\n");
+                for (model, stats) in map.iter() {
+                    out.push_str(&format!(
+                        "kredo_decisions_by_model_total{{model=\"{model}\"}} {}\n",
+                        stats.decisions
+                    ));
+                }
+            }
+            for (model, stats) in map.iter() {
+                stats.duration.render_labeled(
+                    "kredo_model_inference_duration_seconds",
+                    &format!("model=\"{model}\""),
+                    "Decision inference latency.",
+                    &mut out,
+                );
+            }
+        }
+        self.shadow_duration.render(
+            "kredo_shadow_duration_seconds",
+            "Shadow-model inference latency.",
+            &mut out,
+        );
+        out.push_str(&format!(
+            "# HELP kredo_shadow_total Shadow evaluations.\n# TYPE kredo_shadow_total counter\nkredo_shadow_total {}\n",
+            self.shadow_total.load(Ordering::Relaxed)
+        ));
+        out.push_str(&format!(
+            "# HELP kredo_shadow_agree_total Shadow evaluations agreeing with the served model.\n# TYPE kredo_shadow_agree_total counter\nkredo_shadow_agree_total {}\n",
+            self.shadow_agree_total.load(Ordering::Relaxed)
+        ));
         out
+    }
+}
+
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+
+impl Histogram {
+    /// Render a histogram with an extra constant label set.
+    fn render_labeled(&self, name: &str, labels: &str, help: &str, out: &mut String) {
+        out.push_str(&format!("# HELP {name} {help}\n"));
+        out.push_str(&format!("# TYPE {name} histogram\n"));
+        let mut cumulative = 0u64;
+        for (i, b) in LATENCY_BUCKETS.iter().enumerate() {
+            cumulative += self.buckets[i].load(Ordering::Relaxed);
+            out.push_str(&format!(
+                "{name}_bucket{{{labels},le=\"{b}\"}} {cumulative}\n"
+            ));
+        }
+        out.push_str(&format!(
+            "{name}_bucket{{{labels},le=\"+Inf\"}} {}\n",
+            self.count.load(Ordering::Relaxed)
+        ));
+        let sum = self.sum_nanos.load(Ordering::Relaxed) as f64 / 1e9;
+        out.push_str(&format!("{name}_sum{{{labels}}} {sum}\n"));
+        out.push_str(&format!(
+            "{name}_count{{{labels}}} {}\n",
+            self.count.load(Ordering::Relaxed)
+        ));
     }
 }

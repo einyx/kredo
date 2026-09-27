@@ -1177,13 +1177,14 @@ dependencies = [
 
 [[package]]
 name = "kredo"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",
  "clap",
  "dirs",
  "futures",
+ "hex",
  "kredo-api",
  "kredo-decision",
  "kredo-registry",
@@ -1193,6 +1194,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1200,7 +1202,7 @@ dependencies = [
 
 [[package]]
 name = "kredo-api"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "futures",
  "reqwest",
@@ -1212,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "kredo-decision"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "kredo-api",
  "serde",
@@ -1222,7 +1224,7 @@ dependencies = [
 
 [[package]]
 name = "kredo-lang"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1230,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "kredo-registry"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "dirs",
  "futures",
@@ -1248,7 +1250,7 @@ dependencies = [
 
 [[package]]
 name = "kredo-runner"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "hex",
@@ -1267,7 +1269,7 @@ dependencies = [
 
 [[package]]
 name = "kredo-server"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",

@@ -1,6 +1,6 @@
 {
   "name": "@einyx/kredo-mcp",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "kredo decision models as MCP tools for Claude, opencode and other MCP clients. npx @einyx/kredo-mcp install",
   "license": "Apache-2.0",
   "repository": {

@@ -45,6 +45,10 @@ pub enum HeadLayout {
         positive_labels: Vec<String>,
         /// Label order of the model's logits.
         id2label: BTreeMap<String, String>,
+        /// Temperature applied to every pairwise log (calibration). T > 1
+        /// softens, T < 1 sharpens. `None` = 1 (raw model confidence).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        temperature: Option<f64>,
     },
 }
 
@@ -64,6 +68,10 @@ pub struct Head {
     /// multi-head graphs). When absent, flat logits are chunked evenly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
+    /// Temperature for this head's softmax/sigmoid (calibration). T > 1
+    /// softens the distribution, T < 1 sharpens it. `None` = 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
 }
 
 /// The static decision configuration of a model.
@@ -201,6 +209,10 @@ impl DecisionSpec {
         questions: &[Question],
         raw: &[Vec<f64>],
     ) -> Result<Vec<Answer>, DecisionError> {
+        let temperature = match &self.layout {
+            HeadLayout::Pairwise { temperature, .. } => *temperature,
+            _ => None,
+        };
         let mut out = Vec::with_capacity(questions.len());
         for (qi, q) in questions.iter().enumerate() {
             let row = raw.get(qi).ok_or_else(|| {
@@ -210,7 +222,7 @@ impl DecisionSpec {
                 QuestionKind::Choice => {
                     let logits_for_softmax: Vec<f64> =
                         row.iter().map(|p| p.ln().max(-100.0)).collect();
-                    let ps = softmax(&logits_for_softmax);
+                    let ps = softmax(&scale_logits(&logits_for_softmax, temperature));
                     let labels = match q.options.is_empty() {
                         true => (0..row.len()).map(|i| i.to_string()).collect::<Vec<_>>(),
                         false => q.options.clone(),
@@ -236,7 +248,7 @@ impl DecisionSpec {
                     let max = q.max.unwrap_or(3.0);
                     let p_max = row.last().copied().unwrap_or(0.0);
                     let p_min = row.first().copied().unwrap_or(0.0);
-                    let unit = (p_max - p_min).clamp(0.0, 1.0);
+                    let unit = pairwise_unit(p_max, p_min, temperature);
                     let value = min + (max - min) * unit;
                     Answer {
                         id: q.id.clone(),
@@ -253,6 +265,13 @@ impl DecisionSpec {
                 }
                 QuestionKind::Noul => {
                     let p = row.first().copied().unwrap_or(0.0);
+                    let p = match temperature {
+                        Some(t) if t > 0.0 && (t - 1.0).abs() > 1e-9 => {
+                            let z = (p.max(1e-12) / (1.0 - p).max(1e-12)).ln();
+                            sigmoid(z / t)
+                        }
+                        _ => p,
+                    };
                     Answer {
                         id: q.id.clone(),
                         kind: q.kind,
@@ -293,7 +312,7 @@ impl DecisionSpec {
                 .ok_or_else(|| DecisionError::KindMismatch(q.id.clone(), "missing head output"))?;
             let answer = match q.kind {
                 QuestionKind::Choice => {
-                    let ps = softmax(logits);
+                    let ps = softmax(&scale_logits(logits, head.temperature));
                     let mut probabilities = Vec::with_capacity(head.labels.len());
                     for (label, p) in head.labels.iter().zip(ps) {
                         probabilities.push(Probability {
@@ -313,9 +332,9 @@ impl DecisionSpec {
                     let min = q.min.unwrap_or(0.0);
                     let max = q.max.unwrap_or(3.0);
                     let unit = if logits.len() >= 2 {
-                        softmax(logits)[1]
+                        softmax(&scale_logits(logits, head.temperature))[1]
                     } else {
-                        sigmoid(logits[0])
+                        sigmoid(scale_logits(logits, head.temperature)[0])
                     };
                     let value = min + (max - min) * unit;
                     Answer {
@@ -333,9 +352,9 @@ impl DecisionSpec {
                 }
                 QuestionKind::Noul => {
                     let p = if logits.len() >= 2 {
-                        softmax(logits)[1]
+                        softmax(&scale_logits(logits, head.temperature))[1]
                     } else {
-                        sigmoid(logits[0])
+                        sigmoid(scale_logits(logits, head.temperature)[0])
                     };
                     Answer {
                         id: q.id.clone(),
@@ -356,11 +375,34 @@ pub fn sigmoid(x: f64) -> f64 {
     1.0 / (1.0 + (-x).exp())
 }
 
+/// Temperature-scale logits: `z / T`. `None` or T ≈ 1 returns the input
+/// unchanged. This is the standard temperature-scaling calibration: it
+/// preserves the argmax and the ordering while adjusting confidence.
+pub fn scale_logits(logits: &[f64], temperature: Option<f64>) -> Vec<f64> {
+    match temperature {
+        Some(t) if t > 0.0 && (t - 1.0).abs() > 1e-9 => logits.iter().map(|z| z / t).collect(),
+        _ => logits.to_vec(),
+    }
+}
+
 pub fn softmax(logits: &[f64]) -> Vec<f64> {
     let max = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let exps: Vec<f64> = logits.iter().map(|l| (l - max).exp()).collect();
     let sum: f64 = exps.iter().sum();
     exps.iter().map(|e| e / sum).collect()
+}
+
+/// Temperature-scale a pairwise unit through logit space. At the identity
+/// temperature the original `p_pos - p_min` semantics are preserved
+/// unchanged; scaling only engages when a temperature is configured.
+fn pairwise_unit(p_pos: f64, p_neg: f64, temperature: Option<f64>) -> f64 {
+    match temperature {
+        Some(t) if t > 0.0 && (t - 1.0).abs() > 1e-9 => {
+            let z = (p_pos.max(1e-12) / p_neg.max(1e-12)).ln();
+            sigmoid(z / t)
+        }
+        _ => (p_pos - p_neg).clamp(0.0, 1.0),
+    }
 }
 
 #[cfg(test)]
@@ -385,6 +427,7 @@ mod tests {
                     question: "intent".into(),
                     labels: vec!["refund".into(), "bug".into(), "other".into()],
                     output: None,
+                    temperature: None,
                 }],
             },
         }
@@ -416,6 +459,7 @@ mod tests {
                     question: "frustration".into(),
                     labels: vec!["low".into(), "high".into()],
                     output: None,
+                    temperature: None,
                 }],
             },
         };
@@ -433,5 +477,65 @@ mod tests {
             ..choice_q()
         };
         assert!(spec().validate(&[bad]).is_err());
+    }
+
+    #[test]
+    fn temperature_preserves_argmax_but_changes_confidence() {
+        let s = DecisionSpec {
+            layout: HeadLayout::MultiHead {
+                heads: vec![Head {
+                    question: "intent".into(),
+                    labels: vec!["refund".into(), "bug".into(), "other".into()],
+                    output: None,
+                    temperature: Some(2.0),
+                }],
+            },
+        };
+        let raw = &[vec![3.0, 1.0, 0.5]];
+        let hot = s.answer(&[choice_q()], raw).unwrap();
+        let cold = spec().answer(&[choice_q()], raw).unwrap();
+        assert_eq!(hot[0].top().unwrap().label, "refund");
+        let hot_p = hot[0].top().unwrap().p;
+        let cold_p = cold[0].top().unwrap().p;
+        assert!(hot_p < cold_p, "T=2 must soften: {hot_p} vs {cold_p}");
+        let sum: f64 = hot[0].probabilities.iter().map(|p| p.p).sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn scale_logits_identity_and_sharpen() {
+        assert_eq!(scale_logits(&[1.0, 2.0], None), vec![1.0, 2.0]);
+        assert_eq!(scale_logits(&[1.0, 2.0], Some(1.0)), vec![1.0, 2.0]);
+        assert_eq!(scale_logits(&[2.0, 4.0], Some(2.0)), vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn pairwise_temperature_softens_noul() {
+        let q = Question {
+            id: "is_urgent".into(),
+            kind: QuestionKind::Noul,
+            prompt: "urgent".into(),
+            options: vec![],
+            min: None,
+            max: None,
+        };
+        let layout = |t: Option<f64>| DecisionSpec {
+            layout: HeadLayout::Pairwise {
+                template: "{}".into(),
+                positive_labels: vec!["entailment".into()],
+                id2label: Default::default(),
+                temperature: t,
+            },
+        };
+        let raw = &[vec![0.9, 0.05]];
+        let base = layout(None)
+            .answer_pairwise(std::slice::from_ref(&q), raw)
+            .unwrap()[0]
+            .p
+            .unwrap();
+        let hot = layout(Some(3.0)).answer_pairwise(&[q], raw).unwrap()[0]
+            .p
+            .unwrap();
+        assert!(hot < base && hot > 0.5, "softened but same side: {hot}");
     }
 }

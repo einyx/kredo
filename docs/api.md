@@ -57,6 +57,15 @@ Array of `{"name", "model", "modified_at", "size", "questions"}`.
 - `GET /api/ps` — resident models and keep-alive expiry.
 - `POST /api/stop` — `{model}` → unload from memory.
 - `POST /api/delete` — `{model}` → unload and remove from disk.
+- `POST /api/shadow` — `{model}` starts shadow-evaluating the candidate
+  against live traffic (never served); `{}` stops. `GET /api/shadow`
+  returns the current status.
+- `GET /api/shadow/report` — agreement report: `{model, n, agree,
+  agreement, questions: [{question, n, agree}], base_ms, shadow_ms,
+  samples}`.
+- `POST /api/promote` — `{model}` sets the daemon default (what bare
+  `/v1/systemone` resolves to); `{}` clears it back to the library router.
+  Tags stay immutable; routing is config.
 
 ## Configuration
 

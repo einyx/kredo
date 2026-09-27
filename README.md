@@ -115,6 +115,26 @@ classic PAT with `read:packages` works):
 Tools: `kredo_decide`, `kredo_list_models`, `kredo_describe_model` — tool
 descriptions surface verification status, so agents prefer verified models.
 
+## Safe rollout: shadow, calibrate, promote
+
+A model that makes decisions for you must earn its way into production:
+
+```sh
+kredo pull kredo:support-candidate
+kredo shadow start kredo:support-candidate  # runs against live traffic, serves nothing
+kredo shadow report --min-agreement 0.9     # agreement, per-question, latency, samples
+kredo promote kredo:support-candidate       # swap the daemon default — one call
+kredo calibrate kredo:support --eval incidents.jsonl   # fit per-head temperature
+```
+
+Shadow reports are CI-gateable (`--min-agreement` exits non-zero below the
+threshold). Calibration keeps the argmax — accuracy is unchanged — but the
+reported probabilities become honest. All of it is observable on
+`/metrics`: per-model decision counters, per-model latency histograms and
+shadow-agreement series. Releases are cosign-signed and SLSA-attested; see
+also [examples/grafana-webhook](examples/grafana-webhook) for alert
+triage.
+
 ## The API
 
 TypeSafe-compatible: `POST /v1/systemone`, `POST /v1/decisions`,

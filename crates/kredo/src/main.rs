@@ -4,6 +4,7 @@
 //! HTTP, starting it automatically when it is not running. `jeff start`
 //! runs a supervised daemon that restarts on crash.
 
+mod calibrate;
 mod client;
 mod mcp;
 mod output;
@@ -61,16 +62,53 @@ enum Command {
     Unload { model: String },
     /// Expose kredo models as MCP tools over stdio (claude mcp add kredo -- kredo mcp).
     Mcp,
+    /// Shadow-evaluate a candidate model against live traffic without
+    /// serving it.
+    Shadow {
+        #[command(subcommand)]
+        action: ShadowAction,
+    },
+    /// Make a model the daemon default (what bare /v1/systemone routes to).
+    Promote { model: String },
+    /// Clear the daemon default (back to the library router).
+    Demote,
     /// Open the decision playground in your browser.
     Ui,
     /// Re-run the model's verification fixtures locally and print a report.
     Verify { model: String },
+    /// Fit per-head temperature calibration on a labeled eval set (JSONL:
+    /// {"text": "...", "labels": {"question_id": "gold label"}}).
+    Calibrate {
+        model: String,
+        /// Path to the eval set (JSON Lines).
+        #[arg(short = 'e', long = "eval")]
+        eval: String,
+        /// Print the fitted temperatures without saving.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Bake a question set into a new local model (Modelfile).
     Create {
         name: String,
         /// Path to the Modelfile.
         #[arg(short = 'f', long = "file")]
         file: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ShadowAction {
+    /// Start shadowing a candidate model.
+    Start { model: String },
+    /// Stop shadowing.
+    Stop,
+    /// Show shadow + promotion status.
+    Status,
+    /// Print the shadow agreement report.
+    Report {
+        /// Exit non-zero when agreement is below this threshold (0-1).
+        #[arg(long)]
+        min_agreement: Option<f64>,
     },
 }
 
@@ -311,6 +349,68 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Command::Mcp => mcp::run().await,
+        Command::Shadow { action } => {
+            ensure_daemon().await?;
+            match action {
+                ShadowAction::Start { model } => {
+                    let st = client::shadow_start(&base_url(), &model).await?;
+                    println!("shadowing {model} (promoted: {:?})", st.promoted);
+                    println!("watch agreement with `kredo shadow report`");
+                }
+                ShadowAction::Stop => {
+                    client::shadow_stop(&base_url()).await?;
+                    println!("shadow evaluation stopped");
+                }
+                ShadowAction::Status => {
+                    let st = client::shadow_status(&base_url()).await?;
+                    println!("shadow:   {:?}", st.shadow);
+                    println!("promoted: {:?}", st.promoted);
+                }
+                ShadowAction::Report { min_agreement } => {
+                    let r = client::shadow_report(&base_url()).await?;
+                    println!("candidate   {}", r.model);
+                    println!("evaluated   {} requests", r.n);
+                    println!("agreement   {:.1}% ({})", r.agreement * 100.0, r.agree);
+                    println!(
+                        "latency     base {:.1} ms vs shadow {:.1} ms",
+                        r.base_ms, r.shadow_ms
+                    );
+                    for q in &r.questions {
+                        println!("  {:<20}{}/{} agree", q.question, q.agree, q.n);
+                    }
+                    if !r.samples.is_empty() {
+                        println!("recent disagreements:");
+                        for s in r.samples.iter().rev().take(5) {
+                            if let Some(input) = s["input"].as_str() {
+                                println!("  · {}", input.chars().take(80).collect::<String>());
+                            }
+                        }
+                    }
+                    if let Some(min) = min_agreement {
+                        if r.n == 0 || r.agreement < min {
+                            anyhow::bail!(
+                                "agreement {:.1}% below threshold {:.1}%",
+                                r.agreement * 100.0,
+                                min * 100.0
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        Command::Promote { model } => {
+            ensure_daemon().await?;
+            client::promote(&base_url(), Some(&model)).await?;
+            println!("promoted {model} to daemon default");
+            Ok(())
+        }
+        Command::Demote => {
+            ensure_daemon().await?;
+            client::promote(&base_url(), None).await?;
+            println!("daemon default cleared (library router)");
+            Ok(())
+        }
         Command::Ui => {
             ensure_daemon().await?;
             let url = format!("{}/ui", base_url());
@@ -347,6 +447,14 @@ async fn main() -> Result<()> {
             if !report.passed {
                 std::process::exit(1);
             }
+            Ok(())
+        }
+        Command::Calibrate {
+            model,
+            eval,
+            dry_run,
+        } => {
+            calibrate::calibrate(&model, &eval, dry_run)?;
             Ok(())
         }
         Command::Create { name, file } => {

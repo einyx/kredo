@@ -4,6 +4,31 @@ All notable changes to kredo are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-09-27
+
+### Added
+- **Shadow mode**: `kredo shadow start/stop/status/report` — evaluate a
+  candidate model against live traffic without serving it; agreement
+  report with per-question breakdown, latency comparison and disagreement
+  samples; `--min-agreement` for CI gates. `kredo promote/demote` switch
+  the daemon default (tags stay immutable, routing is config).
+- **Per-head temperature calibration**: `Head.temperature` /
+  pairwise temperature in the manifest; `kredo calibrate --eval set.jsonl`
+  grid-searches T per head on labeled data, re-records the verification
+  fixture. Argmax (accuracy) is preserved — only confidence becomes honest.
+- **Per-model Prometheus metrics**: `kredo_decisions_by_model_total`,
+  `kredo_model_inference_duration_seconds{model=…}`, shadow agreement
+  counters and latency histogram.
+- **Grafana alert-triage example** (`examples/grafana-webhook`): webhook
+  relay that decides page/no-page, subsystem and customer impact on alerts.
+
+### Fixed
+- **`kredo:en` read the wrong NLI logit**: the manifest pinned
+  `{0: entailment, …}` but the upstream model config is
+  `{0: contradiction, 1: entailment, 2: neutral}` — urgency/entailment
+  scores were near-zero for every input. Re-pull `kredo:en` to pick up the
+  corrected manifest.
+
 ## [0.2.3] - 2026-09-27
 
 ### Fixed

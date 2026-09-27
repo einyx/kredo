@@ -338,6 +338,18 @@ button:disabled { pointer-events: auto; cursor: not-allowed; }
         </div>
         <div id="results"><div class="empty">press decide — probabilities land here</div></div>
       </div></div>
+
+      <!-- shadow -->
+      <div class="shell reveal" id="shadow-card" style="display:none"><div class="core">
+        <div class="core-head">
+          <span class="core-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.2" stroke-linecap="round"><circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5" stroke-dasharray="2.5 2.5"/></svg>
+            shadow
+          </span>
+          <span class="chip" id="shadow-model" style="font-size:.72rem"></span>
+        </div>
+        <div id="shadow-body"><span class="empty">evaluating…</span></div>
+      </div></div>
     </div>
   </div>
 
@@ -552,8 +564,12 @@ function renderVerification(model) {
   const wrap = $("#verify");
   if (!d) { wrap.innerHTML = '<span class="empty">select a model</span>'; return; }
   const verified = d.details && d.details.verified === "true";
+  const calibrated = d.details && d.details.calibrated === true;
   const prov = d.provenance || {};
   let html = `<span class="seal ${verified ? "ok" : "no"}"><span class="ring"></span>${verified ? "verified" : "unverified"}</span>`;
+  if (calibrated) {
+    html += `<div style="margin-top:.5rem;font-size:.75rem;color:var(--ink-dim);">◆ temperature-calibrated</div>`;
+  }
   html += `<div class="prov">
     <div class="prov-row"><span class="k">dataset</span><span class="v">${esc(prov.dataset || "—")}</span></div>
     <div class="prov-row"><span class="k">pipeline</span><span class="v">${esc(prov.pipeline || "—")}</span></div>
@@ -635,6 +651,40 @@ function renderAnswers(resp) {
     wrap.querySelectorAll(".track i, .gauge i").forEach(b => { b.style.transform = "scaleX(" + Math.max(0.005, b.dataset.p) + ")"; });
   }));
 }
+
+/* ---------- shadow panel ---------- */
+async function pollShadow() {
+  const card = $("#shadow-card");
+  let r;
+  try {
+    r = await api("/api/shadow/report");
+  } catch (e) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "";
+  $("#shadow-model").textContent = r.model;
+  const pct = (r.agreement * 100).toFixed(1);
+  let html = `
+    <div class="prov">
+      <div class="prov-row"><span class="k">agreement</span><span class="v"><b>${pct}%</b> (${r.agree}/${r.n})</span></div>
+      <div class="prov-row"><span class="k">latency</span><span class="v">base ${r.base_ms.toFixed(1)} ms · shadow ${r.shadow_ms.toFixed(1)} ms</span></div>
+    </div>
+    <div class="track" style="margin:.7rem 0"><i data-p="${r.agreement}"></i></div>`;
+  if (r.questions && r.questions.length) {
+    html += `<div class="prov">` + r.questions.map(q => `
+      <div class="prov-row"><span class="k">${esc(q.question)}</span><span class="v">${q.agree}/${q.n}</span></div>`).join("") + `</div>`;
+  }
+  html += `<div style="font-size:.75rem;color:var(--ink-faint);margin-top:.6rem;">candidate is not served — promote with <b>kredo promote</b></div>`;
+  $("#shadow-body").innerHTML = html;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    $("#shadow-body").querySelectorAll(".track i").forEach(b => {
+      b.style.transform = "scaleX(" + Math.max(0.005, b.dataset.p) + ")";
+    });
+  }));
+}
+setInterval(pollShadow, 5000);
+pollShadow();
 
 /* ---------- boot ---------- */
 async function boot() {

@@ -175,3 +175,57 @@ pub async fn stop(base: &str, model: &str) -> Result<()> {
         .error_for_status()?;
     Ok(())
 }
+
+pub async fn shadow_start(base: &str, model: &str) -> Result<kredo_api::ShadowStatus> {
+    let resp = http()
+        .post(url(base, "/api/shadow"))
+        .json(&kredo_api::ShadowRequest {
+            model: Some(model.into()),
+        })
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(resp.json().await?)
+}
+
+pub async fn shadow_stop(base: &str) -> Result<kredo_api::ShadowStatus> {
+    let resp = http()
+        .post(url(base, "/api/shadow"))
+        .json(&kredo_api::ShadowRequest { model: None })
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(resp.json().await?)
+}
+
+pub async fn shadow_status(base: &str) -> Result<kredo_api::ShadowStatus> {
+    Ok(http()
+        .get(url(base, "/api/shadow"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?)
+}
+
+pub async fn shadow_report(base: &str) -> Result<kredo_api::ShadowReport> {
+    Ok(http()
+        .get(url(base, "/api/shadow/report"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?)
+}
+
+pub async fn promote(base: &str, model: Option<&str>) -> Result<kredo_api::ShadowStatus> {
+    let resp = http()
+        .post(url(base, "/api/promote"))
+        .json(&kredo_api::PromoteRequest {
+            model: model.map(String::from),
+        })
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(resp.json().await?)
+}

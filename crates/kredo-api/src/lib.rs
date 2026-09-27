@@ -235,12 +235,72 @@ pub struct ShowResponse {
     pub verification: Option<serde_json::Value>,
 }
 
+// ---------------------------------------------------------------------------
+// Shadow mode / promotion
+// ---------------------------------------------------------------------------
+
+/// `POST /api/shadow` — start (`model` set) or stop (`model` null) shadow
+/// evaluation of a candidate model against live traffic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowRequest {
+    /// Candidate model tag to shadow. `null` stops shadowing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+/// `POST /api/promote` — set (`model` set) or clear (`model` null) the
+/// daemon's default model, i.e. what `/v1/systemone` routes to when the
+/// caller omits `model`. Tags stay immutable; routing is config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromoteRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+/// `GET /api/shadow` — current shadow + promotion status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promoted: Option<String>,
+}
+
+/// Per-question agreement breakdown of a shadow report.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowQuestionStat {
+    pub question: String,
+    pub n: u64,
+    pub agree: u64,
+}
+
+/// `GET /api/shadow/report` — shadow evaluation summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowReport {
+    /// Candidate model being shadowed.
+    pub model: String,
+    /// Evaluated requests.
+    pub n: u64,
+    pub agree: u64,
+    pub agreement: f64,
+    /// Per-question agreement breakdown.
+    #[serde(default)]
+    pub questions: Vec<ShadowQuestionStat>,
+    /// Mean inference latency: served model vs shadow candidate (ms).
+    pub base_ms: f64,
+    pub shadow_ms: f64,
+    /// Most recent disagreements (sample size is capped by the server).
+    #[serde(default)]
+    pub samples: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promoted: Option<String>,
+}
+
 /// Error envelope used across the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiError {
     pub error: String,
 }
-
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.error)

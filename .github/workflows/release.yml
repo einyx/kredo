@@ -7,6 +7,8 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -38,6 +40,11 @@ jobs:
           files: |
             *.tar.gz
             *.tar.gz.sha256
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            *.tar.gz
 
   docker:
     runs-on: ubuntu-latest
@@ -50,11 +57,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
+        id: push
         with:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:latest
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless)
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
   npm:
     runs-on: ubuntu-latest
