@@ -14,10 +14,22 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 /// One eval example: input text plus the gold label per question id.
+/// Labels may be strings ("yes", "a refund", "1.27") or numbers
+/// (noul: >= 0.5 means positive; score: the regressed target).
 #[derive(Debug, Deserialize)]
 struct EvalCase {
     text: String,
-    labels: BTreeMap<String, String>,
+    labels: BTreeMap<String, serde_json::Value>,
+}
+
+impl EvalCase {
+    fn gold(&self, qid: &str) -> Option<String> {
+        match self.labels.get(qid)? {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        }
+    }
 }
 
 /// Grid-search result for one head.
@@ -100,13 +112,13 @@ pub fn calibrate(model_spec: &str, eval_path: &str, dry_run: bool) -> Result<Vec
     for case in &cases {
         let answers = engine.decide(&case.text, &questions)?;
         for a in &answers {
-            let Some(gold) = case.labels.get(&a.id) else {
+            let Some(gold) = case.gold(&a.id) else {
                 continue;
             };
             match a.kind {
                 QuestionKind::Choice => {
                     let probs: Vec<f64> = a.probabilities.iter().map(|p| p.p).collect();
-                    let Some(gi) = a.probabilities.iter().position(|p| p.label == *gold) else {
+                    let Some(gi) = a.probabilities.iter().position(|p| p.label == gold) else {
                         bail!("gold label `{gold}` not in options for question `{}`", a.id);
                     };
                     per_question
@@ -117,11 +129,9 @@ pub fn calibrate(model_spec: &str, eval_path: &str, dry_run: bool) -> Result<Vec
                 }
                 QuestionKind::Noul => {
                     let p = a.p.context("noul answer missing p")?;
-                    let target = if gold.eq_ignore_ascii_case("yes") {
-                        1.0
-                    } else {
-                        0.0
-                    };
+                    let target = noul_target(&gold).with_context(|| {
+                        format!("question `{}`: gold `{gold}` is not yes/no or 0/1", a.id)
+                    })?;
                     scalar_cases
                         .entry(a.id.clone())
                         .or_default()
@@ -251,6 +261,18 @@ pub fn calibrate(model_spec: &str, eval_path: &str, dry_run: bool) -> Result<Vec
         local.manifest.full_name()
     );
     Ok(fits)
+}
+
+/// Parse a noul gold label: "yes"/"no" or a number (>= 0.5 is positive).
+fn noul_target(gold: &str) -> Result<f64> {
+    match gold.to_ascii_lowercase().as_str() {
+        "yes" | "true" => Ok(1.0),
+        "no" | "false" => Ok(0.0),
+        _ => {
+            let v: f64 = gold.parse().context("expected yes/no or numeric")?;
+            Ok(if v >= 0.5 { 1.0 } else { 0.0 })
+        }
+    }
 }
 
 /// RFC 3339 UTC timestamp from the wall clock (no external deps).

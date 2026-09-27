@@ -109,7 +109,10 @@ def evaluate(model, loader, questions) -> dict:
     report = {}
     for qid, kind, _, _, _, _ in questions:
         total, n = stats[qid]
-        report[qid] = round(total / max(n, 1), 4)
+        # Match the manifest provenance metric naming: acc/<qid> for
+        # classification heads, mae/<qid> for score heads.
+        key = f"mae/{qid}" if kind == "score" else f"acc/{qid}"
+        report[key] = round(total / max(n, 1), 4)
     return report
 
 
@@ -124,14 +127,34 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--val-frac", type=float, default=0.1)
+    ap.add_argument("--seed", type=int, default=11,
+                    help="train/val split seed (the dataset generator seed is separate)")
+    ap.add_argument("--no-lab", action="store_true",
+                    help="skip MLflow tracking entirely")
     args = ap.parse_args()
 
     rows = [json.loads(line) for line in Path(args.data).read_text().splitlines() if line.strip()]
-    rng = np.random.default_rng(11)
+    rng = np.random.default_rng(args.seed)
     idx = rng.permutation(len(rows))
     n_val = int(len(rows) * args.val_frac)
     val_rows = [rows[i] for i in idx[:n_val]]
     train_rows = [rows[i] for i in idx[n_val:]]
+
+    # Lab: one parent run per training. Failure-tolerant — see lab.py.
+    run = None
+    if not args.no_lab:
+        from kredo_convert import lab
+        run = lab.start_run(
+            f"train-{args.set}",
+            params={
+                "set": args.set, "base": args.base, "tokenizer": args.tokenizer,
+                "lr": args.lr, "epochs": args.epochs, "batch_size": args.batch_size,
+                "seed": args.seed, "val_frac": args.val_frac,
+                "dataset": args.data,
+                "dataset_sha256": lab.sha256_file(args.data),
+                "rows": len(rows), "train_rows": len(train_rows),
+                "val_rows": len(val_rows),
+            })
 
     questions = get(args.set)
     tok = AutoTokenizer.from_pretrained(args.tokenizer)
@@ -156,7 +179,12 @@ def main() -> None:
             if step % 50 == 0:
                 print(f"epoch {epoch} step {step} loss {loss.item():.4f}")
         print(f"epoch {epoch} mean loss {total / max(1, len(train_loader)):.4f}")
-        print(f"epoch {epoch} eval {evaluate(model, val_loader, questions)}")
+        report = evaluate(model, val_loader, questions)
+        print(f"epoch {epoch} eval {report}")
+        if run:
+            from kredo_convert import lab
+            lab.log_metrics({"train_loss": total / max(1, len(train_loader))}, step=epoch)
+            lab.log_metrics(report, step=epoch)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -166,6 +194,12 @@ def main() -> None:
         {"id": q[0], "kind": q[1], "options": q[3], "min": q[4], "max": q[5]} for q in questions
     ]}, indent=2))
     print(f"saved -> {out}")
+    if run:
+        from kredo_convert import lab
+        lab.log_artifacts(out)
+        import mlflow  # tolerated import; lab already checked availability
+        mlflow.end_run()
+        print(f"lab: run logged ({run.info.run_id[:8]}) — compare with `lab.py compare`")
 
 
 if __name__ == "__main__":

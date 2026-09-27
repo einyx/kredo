@@ -34,3 +34,25 @@ uv run kredo_convert/package.py --model out/triage --onnx out/triage.onnx
 2. Extend the dataset generator (or point `--data` at your own JSONL).
 3. Train, export, pass parity, package; wire the manifest into the Rust
    library with the printed digests.
+
+## The lab (MLflow, local)
+
+Experiment tracking for the *inner loop* — choosing a model. The shipping
+record stays in the manifest (provenance, verification fixtures); the lab
+never becomes a second registry. Backed by a plain file store in
+`mlruns/` (gitignored), no server. All tracking is failure-tolerant: with
+`--no-lab` (or without mlflow installed) training behaves exactly as
+before.
+
+```sh
+uv run kredo_convert/train.py --data data/support.jsonl --set support --out out/support
+uv run kredo_convert/lab.py list                     # recent runs + params
+uv run kredo_convert/calibrate_run.py kredo:support --eval data/incidents.jsonl --parent <run_id>
+uv run kredo_convert/lab.py compare <run_a> <run_b>  # per-head diff; ✗ marks regressions
+```
+
+A training run records: hyperparameters, dataset sha256 + row counts,
+per-epoch loss and per-head `acc/*` / `mae/*` (same names the manifest
+provenance uses, so run ↔ manifest cross-check), and the saved model as
+artifacts. `compare` exits non-zero when run b regresses on any metric,
+so it can gate a packaging step.
